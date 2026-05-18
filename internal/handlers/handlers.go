@@ -266,9 +266,16 @@ func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Warn("live check (dashboard render)", "slug", *u.Slug, "err", err)
 	}
+	// Parse social_links JSON for the profile-tab form (so template can
+	// index by key without a custom template func).
+	links := map[string]string{}
+	if u.SocialLinks != "" {
+		_ = json.Unmarshal([]byte(u.SocialLinks), &links)
+	}
 	h.render(w, "dashboard.html", map[string]any{
-		"User": u,
-		"Live": live,
+		"User":  u,
+		"Live":  live,
+		"Links": links,
 	})
 }
 
@@ -641,6 +648,326 @@ func (h *Handler) CView(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// DashboardSetProfile persists bio + social_links from the dashboard form.
+func (h *Handler) DashboardSetProfile(w http.ResponseWriter, r *http.Request) {
+	u := auth.Current(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	bio := strings.TrimSpace(r.FormValue("bio"))
+	if len(bio) > 2000 {
+		http.Error(w, "bio too long (max 2000 chars)", http.StatusBadRequest)
+		return
+	}
+	// Aggregate social link inputs into a JSON blob so the schema is
+	// stable as we add more fields.
+	links := map[string]string{}
+	for _, k := range []string{"twitter", "twitch", "youtube", "web"} {
+		if v := strings.TrimSpace(r.FormValue("link_" + k)); v != "" {
+			links[k] = v
+		}
+	}
+	socialJSON := ""
+	if len(links) > 0 {
+		b, _ := json.Marshal(links)
+		socialJSON = string(b)
+	}
+	if err := h.store.SetUserProfile(r.Context(), u.ID, bio, socialJSON); err != nil {
+		h.logger.Error("set profile", "uid", u.ID, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, "/dashboard#profile", http.StatusFound)
+}
+
+// ─────────────────────── /u/<slug> public profile ───────────────────────
+
+// SocialLink represents one link rendered on the profile page.
+type SocialLink struct {
+	Key   string // "twitter" | "twitch" | "youtube" | "web"
+	Label string
+	URL   string
+}
+
+// Profile renders the public user profile page. Decoupled from /<slug>
+// (which is the watch experience). Anonymous viewers allowed.
+func (h *Handler) Profile(w http.ResponseWriter, r *http.Request) {
+	slug := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "slug")))
+	if slug == "" || reservedSlugs[slug] {
+		http.NotFound(w, r)
+		return
+	}
+	user, err := h.store.GetUserBySlug(r.Context(), slug)
+	if err != nil {
+		h.logger.Error("profile: get user", "slug", slug, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if user == nil {
+		w.WriteHeader(http.StatusNotFound)
+		h.render(w, "channel_404.html", map[string]any{"Slug": slug})
+		return
+	}
+
+	live, _ := h.livekit.IsLive(r.Context(), *user.Slug)
+
+	links := parseSocialLinks(user.SocialLinks)
+
+	h.render(w, "profile.html", map[string]any{
+		"Profile":     user,
+		"AvatarURL":   discordAvatarURL(user),
+		"Viewer":      auth.Current(r),
+		"Live":        live,
+		"SocialLinks": links,
+	})
+}
+
+func parseSocialLinks(raw string) []SocialLink {
+	if raw == "" {
+		return nil
+	}
+	var m map[string]string
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return nil
+	}
+	// Preserve a stable order for display
+	defs := []struct{ key, label string }{
+		{"twitch", "Twitch"},
+		{"twitter", "Twitter / X"},
+		{"youtube", "YouTube"},
+		{"web", "Website"},
+	}
+	out := []SocialLink{}
+	for _, d := range defs {
+		if v, ok := m[d.key]; ok && v != "" {
+			out = append(out, SocialLink{Key: d.key, Label: d.label, URL: v})
+		}
+	}
+	return out
+}
+
+// ─────────────────────── /admin — moderator dashboard ───────────────────────
+
+// AdminIndex redirects to the default sub-page.
+func (h *Handler) AdminIndex(w http.ResponseWriter, r *http.Request) {
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
+}
+
+func (h *Handler) AdminUsers(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	filter := store.ListUsersFilter{
+		Query:      strings.TrimSpace(q.Get("q")),
+		OnlyAdmin:  q.Get("filter") == "admin",
+		OnlyBanned: q.Get("filter") == "banned",
+		Limit:      200,
+	}
+	users, err := h.store.ListUsers(r.Context(), filter)
+	if err != nil {
+		h.logger.Error("admin users list", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	h.render(w, "admin_users.html", map[string]any{
+		"User":   auth.Current(r),
+		"Active": "users",
+		"Users":  users,
+		"Query":  filter.Query,
+		"Filter": q.Get("filter"),
+	})
+}
+
+func (h *Handler) AdminUserBan(w http.ResponseWriter, r *http.Request) {
+	admin := auth.Current(r)
+	idStr := chi.URLParam(r, "id")
+	id, ok := parseInt64(idStr)
+	if !ok {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	if id == admin.ID {
+		http.Error(w, "you can't ban yourself", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	reason := strings.TrimSpace(r.FormValue("reason"))
+	target, err := h.store.GetUserByID(r.Context(), id)
+	if err != nil || target == nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+	if err := h.store.BanUser(r.Context(), id, admin.ID, reason); err != nil {
+		h.logger.Error("ban", "target", id, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_ = h.store.LogAdminAction(r.Context(), store.AdminAction{
+		AdminID: admin.ID, TargetUserID: &id, TargetSlug: target.Slug,
+		Action: store.ActionBan, Reason: reason,
+	})
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
+}
+
+func (h *Handler) AdminUserUnban(w http.ResponseWriter, r *http.Request) {
+	admin := auth.Current(r)
+	id, ok := parseInt64(chi.URLParam(r, "id"))
+	if !ok {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	target, err := h.store.GetUserByID(r.Context(), id)
+	if err != nil || target == nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+	if err := h.store.UnbanUser(r.Context(), id); err != nil {
+		h.logger.Error("unban", "target", id, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_ = h.store.LogAdminAction(r.Context(), store.AdminAction{
+		AdminID: admin.ID, TargetUserID: &id, TargetSlug: target.Slug,
+		Action: store.ActionUnban,
+	})
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
+}
+
+func (h *Handler) AdminUserPromote(w http.ResponseWriter, r *http.Request) {
+	admin := auth.Current(r)
+	id, ok := parseInt64(chi.URLParam(r, "id"))
+	if !ok {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	target, err := h.store.GetUserByID(r.Context(), id)
+	if err != nil || target == nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+	if err := h.store.PromoteAdmin(r.Context(), id); err != nil {
+		h.logger.Error("promote", "target", id, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_ = h.store.LogAdminAction(r.Context(), store.AdminAction{
+		AdminID: admin.ID, TargetUserID: &id, TargetSlug: target.Slug,
+		Action: store.ActionPromoteAdmin,
+	})
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
+}
+
+func (h *Handler) AdminUserDemote(w http.ResponseWriter, r *http.Request) {
+	admin := auth.Current(r)
+	id, ok := parseInt64(chi.URLParam(r, "id"))
+	if !ok {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	if id == admin.ID {
+		http.Error(w, "you can't demote yourself (use SQL if you really need to)", http.StatusBadRequest)
+		return
+	}
+	target, err := h.store.GetUserByID(r.Context(), id)
+	if err != nil || target == nil {
+		http.Error(w, "user not found", http.StatusNotFound)
+		return
+	}
+	if err := h.store.DemoteAdmin(r.Context(), id); err != nil {
+		h.logger.Error("demote", "target", id, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	_ = h.store.LogAdminAction(r.Context(), store.AdminAction{
+		AdminID: admin.ID, TargetUserID: &id, TargetSlug: target.Slug,
+		Action: store.ActionDemoteAdmin,
+	})
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
+}
+
+func (h *Handler) AdminStreams(w http.ResponseWriter, r *http.Request) {
+	streams, err := h.livekit.ListLive(r.Context())
+	if err != nil {
+		h.logger.Warn("admin streams: list live", "err", err)
+	}
+	type row struct {
+		Slug        string
+		DisplayName string
+		ViewerCount int
+	}
+	rows := make([]row, 0, len(streams))
+	for _, s := range streams {
+		u, _ := h.store.GetUserBySlug(r.Context(), s.Slug)
+		name := s.Slug
+		if u != nil {
+			name = u.GlobalName
+		}
+		rows = append(rows, row{
+			Slug: s.Slug, DisplayName: name, ViewerCount: s.ViewerCount,
+		})
+	}
+	h.render(w, "admin_streams.html", map[string]any{
+		"User":    auth.Current(r),
+		"Active":  "streams",
+		"Streams": rows,
+	})
+}
+
+// AdminStreamKick terminates a LiveKit room (boots the publisher and all
+// viewers). Reason is required for the audit log.
+func (h *Handler) AdminStreamKick(w http.ResponseWriter, r *http.Request) {
+	admin := auth.Current(r)
+	slug := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "slug")))
+	if slug == "" {
+		http.Error(w, "bad slug", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	reason := strings.TrimSpace(r.FormValue("reason"))
+	if err := h.livekit.DeleteRoom(r.Context(), slug); err != nil {
+		h.logger.Error("kick stream", "slug", slug, "err", err)
+		http.Error(w, "kick failed", http.StatusBadGateway)
+		return
+	}
+	slugCopy := slug
+	_ = h.store.LogAdminAction(r.Context(), store.AdminAction{
+		AdminID: admin.ID, TargetSlug: &slugCopy,
+		Action: store.ActionKickStream, Reason: reason,
+	})
+	http.Redirect(w, r, "/admin/streams", http.StatusFound)
+}
+
+func (h *Handler) AdminAudit(w http.ResponseWriter, r *http.Request) {
+	actions, err := h.store.ListAdminActions(r.Context(), 200)
+	if err != nil {
+		h.logger.Error("admin audit list", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	h.render(w, "admin_audit.html", map[string]any{
+		"User":    auth.Current(r),
+		"Active":  "audit",
+		"Actions": actions,
+	})
+}
+
+func parseInt64(s string) (int64, bool) {
+	var n int64
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
 // DashboardLive returns just the live badge — polled by HTMX every 10s.
 func (h *Handler) DashboardLive(w http.ResponseWriter, r *http.Request) {
 	u := auth.Current(r)
@@ -750,7 +1077,7 @@ func mustReservedSet() map[string]bool {
 		"about", "admin", "api", "auth", "c", "callback", "channel", "channels",
 		"chat", "dashboard", "discord", "docs", "healthz", "help", "login",
 		"logout", "multi", "onboarding", "privacy", "search", "settings", "static",
-		"stream", "streams", "support", "tos", "watch",
+		"stream", "streams", "support", "tos", "u", "user", "users", "watch",
 	}
 	out := make(map[string]bool, len(list))
 	for _, s := range list {

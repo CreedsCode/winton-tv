@@ -62,6 +62,31 @@
     }
   });
 
+  // ─────────────── tab switching (dash-tab buttons) ───────────────
+  function activateTab(name) {
+    document.querySelectorAll('.dash-tab').forEach(function (t) {
+      t.classList.toggle('is-active', t.dataset.tab === name);
+    });
+    document.querySelectorAll('.dash-panel').forEach(function (p) {
+      p.classList.toggle('is-active', p.id === 'dash-' + name);
+    });
+    history.replaceState(null, '', '#' + name);
+  }
+
+  document.addEventListener('click', function (e) {
+    const tab = e.target.closest('.dash-tab');
+    if (!tab) return;
+    activateTab(tab.dataset.tab);
+  });
+
+  // On load: activate tab from URL hash, else first tab.
+  document.addEventListener('DOMContentLoaded', function () {
+    const fromHash = (location.hash || '').replace(/^#/, '');
+    const tabs = Array.from(document.querySelectorAll('.dash-tab')).map(function (t) { return t.dataset.tab; });
+    const initial = tabs.includes(fromHash) ? fromHash : tabs[0];
+    if (initial) activateTab(initial);
+  });
+
   // ─────────────── toast on HTMX success ───────────────
   let toastTimer = null;
   function showToast(text, kind) {

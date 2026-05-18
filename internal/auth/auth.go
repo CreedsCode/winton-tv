@@ -144,6 +144,18 @@ func (a *Auth) Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Auto-promote admins listed in ADMIN_DISCORD_IDS env. Runs every
+	// login so an admin can demote themselves and re-login to re-promote
+	// (mostly used to bootstrap the very first admin).
+	if a.cfg.AdminDiscordIDs[u.DiscordID] && !u.IsAdmin {
+		if err := a.store.PromoteAdmin(ctx, u.ID); err != nil {
+			a.logger.Warn("auto-promote admin", "uid", u.ID, "err", err)
+		} else {
+			a.logger.Info("auto-promoted admin from ADMIN_DISCORD_IDS", "uid", u.ID, "discord_id", u.DiscordID)
+			u.IsAdmin = true
+		}
+	}
+
 	// Renew the session ID on auth — prevents session fixation.
 	if err := a.session.RenewToken(ctx); err != nil {
 		a.logger.Warn("renew token", "err", err)

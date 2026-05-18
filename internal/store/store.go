@@ -82,6 +82,13 @@ type User struct {
 	// Stream metadata (V1.5) — both default '' via migration.
 	Title       string
 	Description string
+
+	// V1.8: richer profile + ban audit context
+	Bio           string  // profile bio (plain text, line breaks preserved on render)
+	SocialLinks   string  // JSON: {twitter, twitch, youtube, web} — empty string = none
+	BannedAt      *time.Time
+	BannedByID    *int64
+	BannedReason  string
 }
 
 // Discovery values. Mirror the CHECK constraint in migration 004.
@@ -96,7 +103,8 @@ const userColumns = `
     is_admin, banned, created_at,
     ingress_id, stream_key, stream_whip_url, stream_created_at,
     discovery,
-    title, description
+    title, description,
+    bio, social_links, banned_at, banned_by_id, banned_reason
 `
 
 func scanUser(row pgx.Row) (*User, error) {
@@ -107,6 +115,7 @@ func scanUser(row pgx.Row) (*User, error) {
 		&u.IngressID, &u.StreamKey, &u.StreamWhipURL, &u.StreamCreatedAt,
 		&u.Discovery,
 		&u.Title, &u.Description,
+		&u.Bio, &u.SocialLinks, &u.BannedAt, &u.BannedByID, &u.BannedReason,
 	); err != nil {
 		return nil, err
 	}
@@ -195,6 +204,175 @@ func (s *Store) SetUserSlug(ctx context.Context, userID int64, slug string) erro
 		return errors.New("slug already set or user missing")
 	}
 	return nil
+}
+
+// ─────────────────────── profile + admin (V1.8) ───────────────────────
+
+func (s *Store) SetUserProfile(ctx context.Context, userID int64, bio, socialLinks string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE users SET bio = $1, social_links = $2, updated_at = now() WHERE id = $3
+	`, bio, socialLinks, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+// PromoteAdmin sets is_admin=true. Idempotent.
+func (s *Store) PromoteAdmin(ctx context.Context, userID int64) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE users SET is_admin = true, updated_at = now() WHERE id = $1`, userID)
+	return err
+}
+
+// DemoteAdmin sets is_admin=false. Idempotent.
+func (s *Store) DemoteAdmin(ctx context.Context, userID int64) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE users SET is_admin = false, updated_at = now() WHERE id = $1`, userID)
+	return err
+}
+
+// BanUser sets banned=true plus audit context. Reason can be empty.
+func (s *Store) BanUser(ctx context.Context, userID, adminID int64, reason string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users
+		   SET banned = true,
+		       banned_at = now(),
+		       banned_by_id = $1,
+		       banned_reason = $2,
+		       updated_at = now()
+		 WHERE id = $3
+	`, adminID, reason, userID)
+	return err
+}
+
+func (s *Store) UnbanUser(ctx context.Context, userID int64) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users
+		   SET banned = false,
+		       banned_at = NULL,
+		       banned_by_id = NULL,
+		       banned_reason = '',
+		       updated_at = now()
+		 WHERE id = $1
+	`, userID)
+	return err
+}
+
+// ListUsersFilter narrows ListUsers results.
+type ListUsersFilter struct {
+	Query    string // case-insensitive match against slug, global_name, username
+	OnlyAdmin   bool
+	OnlyBanned  bool
+	Limit       int  // default 100
+}
+
+func (s *Store) ListUsers(ctx context.Context, f ListUsersFilter) ([]*User, error) {
+	limit := f.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	conds := []string{"1=1"}
+	args := []any{}
+	if f.Query != "" {
+		args = append(args, "%"+strings.ToLower(f.Query)+"%")
+		conds = append(conds, fmt.Sprintf(
+			"(lower(slug) LIKE $%d OR lower(global_name) LIKE $%d OR lower(username) LIKE $%d)",
+			len(args), len(args), len(args),
+		))
+	}
+	if f.OnlyAdmin {
+		conds = append(conds, "is_admin = true")
+	}
+	if f.OnlyBanned {
+		conds = append(conds, "banned = true")
+	}
+	args = append(args, limit)
+
+	q := `SELECT ` + userColumns + ` FROM users WHERE ` +
+		strings.Join(conds, " AND ") +
+		` ORDER BY created_at DESC LIMIT $` + fmt.Sprintf("%d", len(args))
+
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*User{}
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, u)
+	}
+	return out, rows.Err()
+}
+
+// AdminAction is a single audit log row.
+type AdminAction struct {
+	ID           int64
+	AdminID      int64
+	AdminName    string  // joined from users
+	TargetUserID *int64
+	TargetName   *string // joined from users (nullable)
+	TargetSlug   *string
+	Action       string
+	Reason       string
+	CreatedAt    time.Time
+}
+
+// Action constants. Keep in sync with handler dispatcher.
+const (
+	ActionBan          = "BAN"
+	ActionUnban        = "UNBAN"
+	ActionKickStream   = "KICK_STREAM"
+	ActionPromoteAdmin = "PROMOTE_ADMIN"
+	ActionDemoteAdmin  = "DEMOTE_ADMIN"
+)
+
+func (s *Store) LogAdminAction(ctx context.Context, a AdminAction) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO admin_actions (admin_id, target_user_id, target_slug, action, reason)
+		VALUES ($1, $2, $3, $4, $5)
+	`, a.AdminID, a.TargetUserID, a.TargetSlug, a.Action, a.Reason)
+	return err
+}
+
+func (s *Store) ListAdminActions(ctx context.Context, limit int) ([]*AdminAction, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT a.id, a.admin_id, ad.global_name,
+		       a.target_user_id, tu.global_name,
+		       a.target_slug, a.action, a.reason, a.created_at
+		  FROM admin_actions a
+		  JOIN users ad ON ad.id = a.admin_id
+		  LEFT JOIN users tu ON tu.id = a.target_user_id
+		 ORDER BY a.created_at DESC
+		 LIMIT $1
+	`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*AdminAction{}
+	for rows.Next() {
+		var a AdminAction
+		if err := rows.Scan(
+			&a.ID, &a.AdminID, &a.AdminName,
+			&a.TargetUserID, &a.TargetName,
+			&a.TargetSlug, &a.Action, &a.Reason, &a.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, &a)
+	}
+	return out, rows.Err()
 }
 
 // ─────────────────────── stream credentials (V1.3) ───────────────────────

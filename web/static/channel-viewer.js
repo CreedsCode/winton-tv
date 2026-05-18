@@ -205,7 +205,9 @@
       if (slug) {
         const pill = document.createElement('a');
         pill.className = 'chat-pill';
-        pill.href = '/' + slug;
+        // V1.8: link to profile, not channel. Channel is "watch", profile
+        // is "who". Profile works whether or not they're live.
+        pill.href = '/u/' + slug;
         pill.textContent = '/' + slug;
         if (isLiveElsewhere) {
           pill.classList.add('is-live');

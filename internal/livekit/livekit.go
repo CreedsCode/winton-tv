@@ -170,6 +170,17 @@ func (c *Client) DeleteIngress(ctx context.Context, ingressID string) error {
 
 // ─────────────────────── Room status ───────────────────────
 
+// DeleteRoom hard-kicks everyone (publisher + viewers) from a room.
+// Used by admin "kick stream" action. Idempotent — no-op if room
+// doesn't exist (treated as not-found = already gone).
+func (c *Client) DeleteRoom(ctx context.Context, room string) error {
+	_, err := c.room.DeleteRoom(ctx, &livekit.DeleteRoomRequest{Room: room})
+	if err != nil && !isNotFound(err) {
+		return err
+	}
+	return nil
+}
+
 // IsLive returns true if `room` has at least one publishing participant.
 // Room-not-found is treated as offline (not an error).
 func (c *Client) IsLive(ctx context.Context, room string) (bool, error) {
