@@ -502,6 +502,107 @@ main {
   border-color: rgba(242, 63, 91, 0.7);
 }
 
+/* ───────────────────── discovery (live cards on landing) ───────────────────── */
+.section-count {
+  display: inline-block;
+  margin-left: 0.6rem;
+  padding: 0.15rem 0.55rem;
+  background: var(--bg-3);
+  color: var(--fg-muted);
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  vertical-align: middle;
+}
+
+.live-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.live-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  text-decoration: none;
+  color: var(--fg);
+  transition: border-color 120ms, transform 120ms;
+}
+.live-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+
+.live-card-thumb {
+  aspect-ratio: 16 / 9;
+  background:
+    linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%);
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+/* V1.5 will swap this for a real thumbnail; for now show a play-glyph */
+.live-card-thumb::before {
+  content: '▶';
+  font-size: 2.5rem;
+  color: rgba(255, 255, 255, 0.08);
+}
+
+.live-card-pill {
+  position: absolute;
+  top: 0.6rem;
+  left: 0.6rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.25rem 0.65rem;
+  background: rgba(242, 63, 91, 0.15);
+  border: 1px solid rgba(242, 63, 91, 0.4);
+  color: #ff8593;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  backdrop-filter: blur(4px);
+}
+.live-card-pill .live-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+}
+
+.live-card-viewers {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.6rem;
+  padding: 0.25rem 0.65rem;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--fg);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  backdrop-filter: blur(4px);
+}
+
+.live-card-info {
+  padding: 1rem 1.25rem;
+}
+.live-card-info h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.live-card-info .muted {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
 /* ───────────────────── channel page (viewer) ───────────────────── */
 .channel-main {
   max-width: var(--max-w);

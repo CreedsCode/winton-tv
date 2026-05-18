@@ -164,6 +164,53 @@ func (c *Client) IsLive(ctx context.Context, room string) (bool, error) {
 	return false, nil
 }
 
+// LiveStream is one currently-publishing channel.
+type LiveStream struct {
+	Slug        string
+	ViewerCount int
+	StartedAt   time.Time
+}
+
+// ListLive returns every room in the SFU that has a publisher attached.
+// Publisher identity == room name == user slug (set when the ingress is
+// created). Viewers are recognised by the "guest-" identity prefix.
+//
+// N+1 query (ListRooms + one ListParticipants per room). Fine while we
+// have small concurrent room counts; switch to LiveKit Room.num_publishers
+// (newer SDKs expose it) once we have ~50+ concurrent rooms.
+func (c *Client) ListLive(ctx context.Context) ([]LiveStream, error) {
+	rooms, err := c.room.ListRooms(ctx, &livekit.ListRoomsRequest{})
+	if err != nil {
+		return nil, fmt.Errorf("list rooms: %w", err)
+	}
+
+	out := make([]LiveStream, 0, len(rooms.Rooms))
+	for _, room := range rooms.Rooms {
+		parts, err := c.room.ListParticipants(ctx, &livekit.ListParticipantsRequest{Room: room.Name})
+		if err != nil {
+			c.logger.Warn("listLive: participants", "room", room.Name, "err", err)
+			continue
+		}
+		hasPublisher := false
+		viewers := 0
+		for _, p := range parts.Participants {
+			if strings.HasPrefix(p.Identity, "guest-") {
+				viewers++
+			} else if len(p.Tracks) > 0 {
+				hasPublisher = true
+			}
+		}
+		if hasPublisher {
+			out = append(out, LiveStream{
+				Slug:        room.Name,
+				ViewerCount: viewers,
+				StartedAt:   time.Unix(room.CreationTime, 0),
+			})
+		}
+	}
+	return out, nil
+}
+
 // ─────────────────────── helpers ───────────────────────
 
 func wsToHTTP(u string) string {
