@@ -18,11 +18,26 @@
 /* ───────────────────── reset / base ───────────────────── */
 * { box-sizing: border-box; }
 
+/* Dark, thin scrollbars that blend with the theme. Default OS scrollbars
+   are visually loud on a black UI. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--bg-3);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
+}
+/* Firefox */
 html {
-  /* Always reserve scrollbar space so layout doesn't shift when tab/
-     route content varies in height. Prevents the "phantom scrollbar
-     appearing on tab switch" the dashboard had. */
-  overflow-y: scroll;
+  scrollbar-width: thin;
+  scrollbar-color: var(--bg-3) transparent;
 }
 
 html, body {
