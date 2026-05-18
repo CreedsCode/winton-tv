@@ -67,10 +67,33 @@ type User struct {
 	IsAdmin    bool
 	Banned     bool
 	CreatedAt  time.Time
+
+	// Stream credentials (V1.3) — null until first /dashboard/setup-stream click.
+	IngressID       *string
+	StreamKey       *string
+	StreamWhipURL   *string
+	StreamCreatedAt *time.Time
 }
 
-// UpsertUser inserts or updates a user keyed by discord_id. Returns the
-// post-write row (so callers see the canonical id/slug/etc.).
+const userColumns = `
+    id, discord_id, username, global_name, avatar_hash, slug,
+    is_admin, banned, created_at,
+    ingress_id, stream_key, stream_whip_url, stream_created_at
+`
+
+func scanUser(row pgx.Row) (*User, error) {
+	var u User
+	if err := row.Scan(
+		&u.ID, &u.DiscordID, &u.Username, &u.GlobalName, &u.AvatarHash, &u.Slug,
+		&u.IsAdmin, &u.Banned, &u.CreatedAt,
+		&u.IngressID, &u.StreamKey, &u.StreamWhipURL, &u.StreamCreatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return &u, nil
+}
+
+// UpsertUser inserts or updates a user keyed by discord_id.
 func (s *Store) UpsertUser(ctx context.Context, u User) (*User, error) {
 	row := s.pool.QueryRow(ctx, `
 		INSERT INTO users (discord_id, username, global_name, avatar_hash, updated_at)
@@ -80,37 +103,38 @@ func (s *Store) UpsertUser(ctx context.Context, u User) (*User, error) {
 		       global_name = EXCLUDED.global_name,
 		       avatar_hash = EXCLUDED.avatar_hash,
 		       updated_at  = now()
-		RETURNING id, discord_id, username, global_name, avatar_hash, slug,
-		          is_admin, banned, created_at
-	`, u.DiscordID, u.Username, u.GlobalName, u.AvatarHash)
-
-	var out User
-	if err := row.Scan(
-		&out.ID, &out.DiscordID, &out.Username, &out.GlobalName,
-		&out.AvatarHash, &out.Slug, &out.IsAdmin, &out.Banned, &out.CreatedAt,
-	); err != nil {
-		return nil, err
-	}
-	return &out, nil
+		RETURNING `+userColumns,
+		u.DiscordID, u.Username, u.GlobalName, u.AvatarHash,
+	)
+	return scanUser(row)
 }
 
 func (s *Store) GetUserByID(ctx context.Context, id int64) (*User, error) {
-	row := s.pool.QueryRow(ctx, `
-		SELECT id, discord_id, username, global_name, avatar_hash, slug,
-		       is_admin, banned, created_at
-		FROM users WHERE id = $1
-	`, id)
-	var u User
-	if err := row.Scan(
-		&u.ID, &u.DiscordID, &u.Username, &u.GlobalName, &u.AvatarHash,
-		&u.Slug, &u.IsAdmin, &u.Banned, &u.CreatedAt,
-	); err != nil {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users WHERE id = $1`, id,
+	)
+	u, err := scanUser(row)
+	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	return &u, nil
+	return u, nil
+}
+
+func (s *Store) GetUserBySlug(ctx context.Context, slug string) (*User, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users WHERE lower(slug) = lower($1)`, slug,
+	)
+	u, err := scanUser(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return u, nil
 }
 
 func (s *Store) SlugTaken(ctx context.Context, slug string) (bool, error) {
@@ -134,6 +158,40 @@ func (s *Store) SetUserSlug(ctx context.Context, userID int64, slug string) erro
 		return errors.New("slug already set or user missing")
 	}
 	return nil
+}
+
+// ─────────────────────── stream credentials (V1.3) ───────────────────────
+
+func (s *Store) SetStreamCredentials(ctx context.Context, userID int64, ingressID, streamKey, whipURL string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE users
+		   SET ingress_id        = $1,
+		       stream_key        = $2,
+		       stream_whip_url   = $3,
+		       stream_created_at = now(),
+		       updated_at        = now()
+		 WHERE id = $4
+	`, ingressID, streamKey, whipURL, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+func (s *Store) ClearStreamCredentials(ctx context.Context, userID int64) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE users
+		   SET ingress_id        = NULL,
+		       stream_key        = NULL,
+		       stream_whip_url   = NULL,
+		       stream_created_at = NULL,
+		       updated_at        = now()
+		 WHERE id = $1
+	`, userID)
+	return err
 }
 
 // ─────────────────────── migrations ───────────────────────

@@ -6,6 +6,7 @@
   <title>Dashboard &mdash; winton-tv</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -22,23 +23,69 @@
   </header>
 
   <main>
-    <section class="hero hero-narrow">
-      <h1>Hey {{.User.GlobalName}}</h1>
-      <p class="lede">
-        Your channel: <a href="/{{.User.Slug}}"><code>winton.tv/{{.User.Slug}}</code></a>
-      </p>
-
-      <div class="placeholder-card">
-        <h3>Stream key &mdash; coming in V1.3</h3>
-        <p>
-          Next vertical wires up LiveKit. You'll see a WHIP URL + bearer token
-          here, paste both into OBS, and go live with sub-500ms latency.
-        </p>
-        <p>
-          For now, this dashboard is just confirmation that your Discord
-          identity is wired up and your slug is claimed.
-        </p>
+    <section class="dash">
+      <div class="dash-head">
+        <div>
+          <h1>{{.User.GlobalName}}</h1>
+          <p class="lede">
+            <a href="/{{.User.Slug}}"><code>winton.tv/{{.User.Slug}}</code></a>
+          </p>
+        </div>
+        {{template "_live_badge.html" .}}
       </div>
+
+      {{if .User.StreamKey}}
+      <section class="stream-card">
+        <h2>Stream credentials</h2>
+        <p class="muted">
+          Paste these into OBS &rarr; Settings &rarr; Stream. Service:
+          <strong>WHIP</strong>.
+        </p>
+
+        <div class="cred-row">
+          <label for="whip-url">WHIP server URL</label>
+          <div class="cred-value">
+            <input type="text" id="whip-url" readonly value="{{.User.StreamWhipURL}}">
+            <button class="btn btn-secondary" type="button"
+                    onclick="navigator.clipboard.writeText(document.getElementById('whip-url').value)">Copy</button>
+          </div>
+        </div>
+
+        <div class="cred-row">
+          <label for="stream-key">Bearer token / stream key</label>
+          <div class="cred-value">
+            <input type="password" id="stream-key" readonly value="{{.User.StreamKey}}">
+            <button class="btn btn-secondary" type="button"
+                    onclick="document.getElementById('stream-key').type='text'">Show</button>
+            <button class="btn btn-secondary" type="button"
+                    onclick="navigator.clipboard.writeText(document.getElementById('stream-key').value)">Copy</button>
+          </div>
+        </div>
+
+        <details class="rotate">
+          <summary>Rotate stream key</summary>
+          <p class="muted">
+            Rotating destroys the current WHIP credentials and creates new
+            ones. Any active stream will be cut. Use if your key leaks.
+          </p>
+          <form method="POST" action="/dashboard/rotate-stream">
+            <button class="btn btn-danger" type="submit"
+                    onclick="return confirm('Rotate stream key? Any active stream will end.')">Rotate now</button>
+          </form>
+        </details>
+      </section>
+      {{else}}
+      <section class="stream-card setup">
+        <h2>Set up streaming</h2>
+        <p class="muted">
+          One click and you'll get a WHIP URL + token to paste into OBS.
+          We provision a LiveKit ingress for your channel.
+        </p>
+        <form method="POST" action="/dashboard/setup-stream">
+          <button class="btn btn-primary" type="submit">Create stream credentials</button>
+        </form>
+      </section>
+      {{end}}
     </section>
   </main>
 

@@ -1,19 +1,43 @@
+# winton-tv full stack — app + postgres + redis + livekit + ingress.
+# Designed for Dokploy "compose deploy from GitHub". Set secrets via
+# Dokploy env vars (or a .env on the server). Required:
+#   DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / DISCORD_GUILD_ID
+#   BASE_URL                        e.g. https://winton.derc.io
+#   LIVEKIT_API_KEY / _SECRET       generate with `livekit-server generate-keys`
+#   LIVEKIT_PUBLIC_URL              e.g. wss://livekit.winton.derc.io
+#   INGRESS_WHIP_BASE_URL           e.g. https://ingress.winton.derc.io/x
+#
+# Optional (default to in-cluster values):
+#   DATABASE_URL                    defaults to postgres in this compose
+#   LIVEKIT_URL                     defaults to ws://livekit:7880 (internal)
+
 services:
   app:
     build: .
-    image: winton-tv:dev
+    image: winton-tv:latest
     container_name: winton-tv
     restart: unless-stopped
     ports:
       - "8080:8080"
-    env_file: .env
     environment:
-      # Compose overrides the .env DATABASE_URL host since "localhost" doesn't
-      # resolve to the postgres container from inside the app container.
-      DATABASE_URL: postgres://winton:winton@postgres:5432/winton?sslmode=disable
+      PORT: "8080"
+      BASE_URL: "${BASE_URL}"
+      DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID}"
+      DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET}"
+      DISCORD_GUILD_ID: "${DISCORD_GUILD_ID}"
+      DATABASE_URL: "${DATABASE_URL:-postgres://winton:winton@postgres:5432/winton?sslmode=disable}"
+      LIVEKIT_URL: "${LIVEKIT_URL:-ws://livekit:7880}"
+      LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL}"
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
+      LIVEKIT_INGRESS_URL: "${LIVEKIT_INGRESS_URL:-http://ingress:9090}"
     depends_on:
       postgres:
         condition: service_healthy
+      livekit:
+        condition: service_started
+      ingress:
+        condition: service_started
 
   postgres:
     image: postgres:16-alpine
@@ -24,7 +48,6 @@ services:
       POSTGRES_PASSWORD: winton
       POSTGRES_DB: winton
     ports:
-      # Exposed for local dev tools (psql, DBeaver). Remove for true prod.
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -34,5 +57,50 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    container_name: winton-redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redisdata:/data
+
+  livekit:
+    image: livekit/livekit-server:v1.7
+    container_name: winton-livekit
+    restart: unless-stopped
+    command: ["--config", "/etc/livekit.yaml"]
+    ports:
+      - "7880:7880"          # signaling (HTTP/WS) — front with Traefik+TLS in prod
+      - "7881:7881"          # ICE/TCP fallback
+      - "50000-50100:50000-50100/udp"  # RTC media (UDP) — needs router forward in prod
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+    volumes:
+      - ./deploy/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      - redis
+
+  ingress:
+    image: livekit/ingress:v1.4
+    container_name: winton-ingress
+    restart: unless-stopped
+    command: ["--config", "/etc/ingress.yaml"]
+    ports:
+      - "1935:1935"          # RTMP
+      - "8082:8082"          # WHIP (OBS posts here) — front with Traefik+TLS in prod
+      - "9090:9090"          # internal Twirp API for the app to call
+    environment:
+      INGRESS_API_KEY: "${LIVEKIT_API_KEY}"
+      INGRESS_API_SECRET: "${LIVEKIT_API_SECRET}"
+      INGRESS_WHIP_BASE_URL: "${INGRESS_WHIP_BASE_URL:-http://localhost:8082/x}"
+      INGRESS_RTMP_BASE_URL: "${INGRESS_RTMP_BASE_URL:-rtmp://localhost:1935/x}"
+    volumes:
+      - ./deploy/ingress.yaml:/etc/ingress.yaml:ro
+    depends_on:
+      - livekit
+      - redis
+
 volumes:
   pgdata:
+  redisdata:
