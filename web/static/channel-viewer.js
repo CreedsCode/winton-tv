@@ -109,15 +109,65 @@
     });
 
     room.on(LivekitClient.RoomEvent.TrackSubscribed, function (track, pub, p) {
-      log('track subscribed', { from: p.identity, kind: track.kind, source: pub.source });
+      log('track subscribed', {
+        from: p.identity,
+        kind: track.kind,
+        source: pub.source,
+        mimeType: pub.mimeType,
+        muted: track.isMuted,
+      });
       if (track.kind === LivekitClient.Track.Kind.Video) {
         track.attach(videoEl);
         hideOverlay();
         setBadgeLive(true);
         if (videoEl.muted) unmuteBtn.hidden = false;
+
+        // Inspect video element state right after attach
+        log('video attached', {
+          srcObjectSet: !!videoEl.srcObject,
+          videoWidth: videoEl.videoWidth,
+          videoHeight: videoEl.videoHeight,
+          readyState: videoEl.readyState,  // 0=nothing, 4=enough data
+          paused: videoEl.paused,
+          muted: videoEl.muted,
+        });
+
+        // Force playback in case autoplay was suppressed.
+        videoEl.play().then(function () {
+          log('video.play() resolved');
+        }).catch(function (e) {
+          log('video.play() rejected', e.name, e.message);
+        });
+
+        // Re-inspect a moment later — frames should be arriving.
+        setTimeout(function () {
+          log('video state @ +2s', {
+            videoWidth: videoEl.videoWidth,
+            videoHeight: videoEl.videoHeight,
+            readyState: videoEl.readyState,
+            currentTime: videoEl.currentTime,
+            paused: videoEl.paused,
+            networkState: videoEl.networkState,
+          });
+        }, 2000);
       } else if (track.kind === LivekitClient.Track.Kind.Audio) {
         track.attach(videoEl);
       }
+    });
+
+    // Surface native video element issues
+    ['playing', 'waiting', 'stalled', 'suspend', 'error', 'loadedmetadata', 'canplay'].forEach(function (ev) {
+      videoEl.addEventListener(ev, function () {
+        log('video.' + ev, {
+          videoWidth: videoEl.videoWidth,
+          videoHeight: videoEl.videoHeight,
+          readyState: videoEl.readyState,
+          err: videoEl.error && {
+            code: videoEl.error.code,
+            message: videoEl.error.message,
+          },
+        });
+      });
     });
 
     room.on(LivekitClient.RoomEvent.TrackUnsubscribed, function (track) {
