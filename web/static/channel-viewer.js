@@ -1,6 +1,12 @@
 // Channel viewer: LiveKit room (subscribe video/audio) + chat via
 // DataChannel. Anonymous viewers receive chat but token's
 // CanPublishData=false stops them from sending. Server enforces.
+//
+// V1.8 additions:
+//   - Viewer count in chat header (driven by Room participant events)
+//   - Channel pill in chat (linkable /<slug> for senders who own a channel)
+//   - Owner crown 👑 (for sender whose slug == this channel)
+//   - Cam icon 📹 (for sender currently streaming elsewhere; polled API)
 
 (function () {
   const TAG = '[viewer]';
@@ -29,13 +35,32 @@
       return;
     }
 
-    const videoEl   = document.getElementById('lk-video');
-    const overlay   = document.getElementById('player-overlay');
-    const unmuteBtn = document.getElementById('unmute-hint');
-    const liveBadge = document.querySelector('.live-badge');
-    const chatList  = document.getElementById('chat-messages');
-    const chatForm  = document.getElementById('chat-form');
-    const chatInput = document.getElementById('chat-input');
+    const videoEl     = document.getElementById('lk-video');
+    const overlay     = document.getElementById('player-overlay');
+    const unmuteBtn   = document.getElementById('unmute-hint');
+    const liveBadge   = document.querySelector('.live-badge');
+    const chatList    = document.getElementById('chat-messages');
+    const chatForm    = document.getElementById('chat-form');
+    const chatInput   = document.getElementById('chat-input');
+    const viewerCount = document.getElementById('viewer-count');
+
+    // Set of slugs currently live elsewhere (excluding current room).
+    // Refreshed every 30s; chat lookups use this for cam icons.
+    let liveSlugs = new Set();
+
+    function refreshLiveSlugs() {
+      if (!cfg.liveStreamsURL) return;
+      fetch(cfg.liveStreamsURL, { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data && Array.isArray(data.slugs)) {
+            liveSlugs = new Set(data.slugs);
+          }
+        })
+        .catch(function (e) { log('liveStreams refresh failed', e); });
+    }
+    refreshLiveSlugs();
+    setInterval(refreshLiveSlugs, 30000);
 
     function setBadgeLive(isLive) {
       if (!liveBadge) return;
@@ -74,7 +99,17 @@
       return p && p.identity === cfg.room;
     }
 
-    // ─────────────── Chat ───────────────
+    // ─────────────── Viewer count ───────────────
+    function updateViewerCount() {
+      if (!viewerCount) return;
+      let n = 0;
+      room.remoteParticipants.forEach(function (p) { if (!isPublisher(p)) n++; });
+      // include ourselves
+      n += 1;
+      viewerCount.textContent = String(n);
+    }
+
+    // ─────────────── Chat helpers ───────────────
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
 
@@ -84,10 +119,9 @@
       });
     }
 
-    function colorFor(identity) {
-      // deterministic color per identity (HSL hue from a simple hash)
+    function colorFor(s) {
       let h = 0;
-      for (let i = 0; i < identity.length; i++) h = (h * 31 + identity.charCodeAt(i)) % 360;
+      for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
       return 'hsl(' + h + ', 65%, 72%)';
     }
 
@@ -96,7 +130,7 @@
       try { return JSON.parse(raw); } catch (e) { return {}; }
     }
 
-    function avatarInitial(name) {
+    function initialOf(name) {
       const t = (name || '?').trim();
       return t.length ? t[0].toUpperCase() : '?';
     }
@@ -106,11 +140,16 @@
       const isSelf = !!opts.self;
       const name = (participant && participant.name) || (isSelf ? 'You' : 'Guest');
       const meta = parseMeta(participant && participant.metadata);
-      const color = colorFor((participant && participant.identity) || 'self');
+      const ident = (participant && participant.identity) || 'self';
+      const color = colorFor(ident);
+      const slug = meta.slug || '';
+      const isOwner = !!meta.is_owner;
+      const isLiveElsewhere = slug && slug !== cfg.room && liveSlugs.has(slug);
 
       const row = document.createElement('div');
-      row.className = 'chat-msg';
+      row.className = 'chat-msg' + (isOwner ? ' is-owner' : '');
 
+      // Avatar
       const avatar = document.createElement('div');
       avatar.className = 'chat-avatar';
       if (meta.avatar_url) {
@@ -119,16 +158,55 @@
         img.alt = '';
         avatar.appendChild(img);
       } else {
-        avatar.textContent = avatarInitial(name);
+        avatar.textContent = initialOf(name);
         avatar.style.background = 'hsl(' + colorFor(name).match(/\d+/)[0] + ', 30%, 22%)';
         avatar.style.color = color;
       }
 
+      // Body
       const body = document.createElement('div');
       body.className = 'chat-body';
-      body.innerHTML =
-        '<span class="chat-name" style="color:' + color + '">' + escapeHTML(name) + '</span>' +
-        '<span class="chat-text">' + escapeHTML(text) + '</span>';
+
+      // Header row: crown, name, slug pill, cam icon
+      const header = document.createElement('div');
+      header.className = 'chat-line';
+
+      if (isOwner) {
+        const crown = document.createElement('span');
+        crown.className = 'chat-crown';
+        crown.title = 'Channel owner';
+        crown.textContent = '👑';
+        header.appendChild(crown);
+      }
+
+      const nameEl = document.createElement('span');
+      nameEl.className = 'chat-name';
+      nameEl.style.color = color;
+      nameEl.textContent = name;
+      header.appendChild(nameEl);
+
+      if (slug) {
+        const pill = document.createElement('a');
+        pill.className = 'chat-pill';
+        pill.href = '/' + slug;
+        pill.textContent = '/' + slug;
+        if (isLiveElsewhere) {
+          pill.classList.add('is-live');
+          const cam = document.createElement('span');
+          cam.className = 'chat-cam';
+          cam.title = 'Live now';
+          cam.textContent = '📹';
+          pill.appendChild(cam);
+        }
+        header.appendChild(pill);
+      }
+
+      body.appendChild(header);
+
+      const textEl = document.createElement('div');
+      textEl.className = 'chat-text';
+      textEl.innerHTML = escapeHTML(text);
+      body.appendChild(textEl);
 
       row.appendChild(avatar);
       row.appendChild(body);
@@ -155,6 +233,7 @@
 
     room.on(LivekitClient.RoomEvent.Connected, function () {
       log('room connected');
+      updateViewerCount();
     });
 
     room.on(LivekitClient.RoomEvent.Disconnected, function (reason) {
@@ -166,6 +245,7 @@
     room.on(LivekitClient.RoomEvent.ParticipantConnected, function (p) {
       log('participant connected', p.identity);
       if (isPublisher(p)) showConnecting();
+      updateViewerCount();
     });
 
     room.on(LivekitClient.RoomEvent.ParticipantDisconnected, function (p) {
@@ -174,68 +254,20 @@
         showOffline();
         setBadgeLive(false);
       }
+      updateViewerCount();
     });
 
     room.on(LivekitClient.RoomEvent.TrackSubscribed, function (track, pub, p) {
-      log('track subscribed', {
-        from: p.identity,
-        kind: track.kind,
-        source: pub.source,
-        mimeType: pub.mimeType,
-        muted: track.isMuted,
-      });
+      log('track subscribed', { from: p.identity, kind: track.kind });
       if (track.kind === LivekitClient.Track.Kind.Video) {
         track.attach(videoEl);
         hideOverlay();
         setBadgeLive(true);
         if (videoEl.muted) unmuteBtn.hidden = false;
-
-        // Inspect video element state right after attach
-        log('video attached', {
-          srcObjectSet: !!videoEl.srcObject,
-          videoWidth: videoEl.videoWidth,
-          videoHeight: videoEl.videoHeight,
-          readyState: videoEl.readyState,  // 0 = nothing, 4 = enough data
-          paused: videoEl.paused,
-          muted: videoEl.muted,
-        });
-
-        // Force playback in case autoplay was suppressed.
-        videoEl.play().then(function () {
-          log('video.play() resolved');
-        }).catch(function (e) {
-          log('video.play() rejected', e.name, e.message);
-        });
-
-        // Re-inspect a moment later — frames should be arriving.
-        setTimeout(function () {
-          log('video state @ +2s', {
-            videoWidth: videoEl.videoWidth,
-            videoHeight: videoEl.videoHeight,
-            readyState: videoEl.readyState,
-            currentTime: videoEl.currentTime,
-            paused: videoEl.paused,
-            networkState: videoEl.networkState,
-          });
-        }, 2000);
+        videoEl.play().catch(function () {});
       } else if (track.kind === LivekitClient.Track.Kind.Audio) {
         track.attach(videoEl);
       }
-    });
-
-    // Surface native video element issues
-    ['playing', 'waiting', 'stalled', 'suspend', 'error', 'loadedmetadata', 'canplay'].forEach(function (ev) {
-      videoEl.addEventListener(ev, function () {
-        log('video.' + ev, {
-          videoWidth: videoEl.videoWidth,
-          videoHeight: videoEl.videoHeight,
-          readyState: videoEl.readyState,
-          err: videoEl.error && {
-            code: videoEl.error.code,
-            message: videoEl.error.message,
-          },
-        });
-      });
     });
 
     room.on(LivekitClient.RoomEvent.TrackUnsubscribed, function (track) {
@@ -257,7 +289,6 @@
       unmuteBtn.hidden = true;
     });
 
-    // Send chat — only wired when canChat=true (server enforces too).
     if (chatForm && cfg.canChat) {
       chatForm.addEventListener('submit', function (e) {
         e.preventDefault();
@@ -277,6 +308,7 @@
     log('connecting...');
     room.connect(cfg.url, cfg.token, { autoSubscribe: true })
       .then(function () {
+        updateViewerCount();
         const pubInRoom = Array.from(room.remoteParticipants.values()).some(isPublisher);
         if (!pubInRoom) {
           showOffline();

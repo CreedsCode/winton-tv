@@ -86,6 +86,29 @@
       </section>
 
       <section class="settings-card">
+        <h2>Channel info</h2>
+        <p class="muted">Shown on your channel page header. Description supports plain text with line breaks.</p>
+        <form class="metadata-form"
+              hx-post="/dashboard/metadata"
+              hx-swap="none">
+          <label for="title">Title</label>
+          <input type="text" id="title" name="title"
+                 maxlength="100"
+                 placeholder="e.g. CS2 ranked grind with the squad"
+                 value="{{.User.Title}}">
+          <p class="field-help">Up to 100 chars.</p>
+
+          <label for="description">Description</label>
+          <textarea id="description" name="description"
+                    rows="4" maxlength="2000"
+                    placeholder="What's the stream about? Who's playing? Drop links, schedule, etc.">{{.User.Description}}</textarea>
+          <p class="field-help">Up to 2000 chars. Plain text with line breaks.</p>
+
+          <button class="btn btn-primary" type="submit">Save</button>
+        </form>
+      </section>
+
+      <section class="settings-card">
         <h2>Channel privacy</h2>
         <p class="muted">Who can find your channel on the landing-page discovery grid. Your channel page (<code>winton.tv/{{.User.Slug}}</code>) is always reachable by direct link.</p>
         <form class="discovery-form"
@@ -147,5 +170,8 @@
   <footer class="site-footer">
     <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
   </footer>
+
+  <!-- Toast slot. dashboard.js fills it on HTMX successful response. -->
+  <div id="toast" class="toast" hidden></div>
 </body>
 </html>

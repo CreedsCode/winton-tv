@@ -22,11 +22,13 @@ import (
 
 // chatMetadata is what gets stamped into a viewer's LiveKit participant
 // metadata. Other clients deserialise this when rendering chat lines so
-// the sender's avatar + Discord identity are server-attested (came from
-// our JWT signing, not from the chat payload itself).
+// the sender's avatar + Discord identity + channel pill + crown are all
+// server-attested (came from our JWT signing, not from the chat payload).
 type chatMetadata struct {
 	AvatarURL string `json:"avatar_url,omitempty"`
 	DiscordID string `json:"discord_id,omitempty"`
+	Slug      string `json:"slug,omitempty"`     // viewer's own channel slug (pill in chat)
+	IsOwner   bool   `json:"is_owner,omitempty"` // true if viewer == this channel's owner (crown)
 }
 
 type Handler struct {
@@ -178,6 +180,10 @@ func (h *Handler) Channel(w http.ResponseWriter, r *http.Request) {
 			AvatarURL: discordAvatarURL(viewer),
 			DiscordID: viewer.DiscordID,
 		}
+		if viewer.Slug != nil {
+			meta.Slug = *viewer.Slug
+			meta.IsOwner = strings.EqualFold(*viewer.Slug, *user.Slug)
+		}
 		if b, err := json.Marshal(meta); err == nil {
 			opts.Metadata = string(b)
 		}
@@ -306,6 +312,141 @@ func (h *Handler) DashboardSetDiscovery(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+// DashboardSetMetadata persists title + description from the dashboard
+// form. HTMX-friendly: 204 on success so toast JS shows "Saved".
+func (h *Handler) DashboardSetMetadata(w http.ResponseWriter, r *http.Request) {
+	u := auth.Current(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	title := strings.TrimSpace(r.FormValue("title"))
+	description := strings.TrimSpace(r.FormValue("description"))
+	if len(title) > 100 {
+		http.Error(w, "title too long (max 100 chars)", http.StatusBadRequest)
+		return
+	}
+	if len(description) > 2000 {
+		http.Error(w, "description too long (max 2000 chars)", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.SetUserMetadata(r.Context(), u.ID, title, description); err != nil {
+		h.logger.Error("set metadata", "uid", u.ID, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+// APILiveStreams returns the list of currently-live channel slugs as
+// JSON. Polled by the channel-viewer JS (~30s) so chat can render a
+// cam icon next to sender names who are streaming elsewhere.
+func (h *Handler) APILiveStreams(w http.ResponseWriter, r *http.Request) {
+	streams, err := h.livekit.ListLive(r.Context())
+	if err != nil {
+		h.logger.Warn("api/live-streams", "err", err)
+	}
+	slugs := make([]string, 0, len(streams))
+	viewer := auth.Current(r)
+	for _, s := range streams {
+		u, err := h.store.GetUserBySlug(r.Context(), s.Slug)
+		if err != nil || u == nil {
+			continue
+		}
+		// Honour discovery setting so unlisted streams don't leak via this
+		// endpoint either.
+		if !shouldShowInDiscovery(u.Discovery, viewer != nil) {
+			continue
+		}
+		slugs = append(slugs, s.Slug)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]any{"slugs": slugs})
+}
+
+// Multi renders a grid of LiveKit viewer players for a comma-separated
+// list of slugs: /multi?s=alice,bob,charlie. Each cell is its own
+// LiveKit Room connection (handled in multi-viewer.js). Anonymous viewers
+// are allowed; honours discovery: unlisted slugs are silently skipped
+// for anon viewers, included for guild members.
+func (h *Handler) Multi(w http.ResponseWriter, r *http.Request) {
+	raw := r.URL.Query().Get("s")
+	if raw == "" {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	parts := strings.Split(raw, ",")
+	if len(parts) > 9 {
+		parts = parts[:9] // sanity cap; 3x3 grid max for V1
+	}
+
+	viewer := auth.Current(r)
+	type cell struct {
+		Slug         string
+		DisplayName  string
+		LiveKitToken string
+		Title        string
+	}
+	cells := make([]cell, 0, len(parts))
+	seen := make(map[string]bool)
+
+	for _, raw := range parts {
+		slug := strings.ToLower(strings.TrimSpace(raw))
+		if slug == "" || seen[slug] || reservedSlugs[slug] {
+			continue
+		}
+		seen[slug] = true
+
+		u, err := h.store.GetUserBySlug(r.Context(), slug)
+		if err != nil || u == nil {
+			continue
+		}
+		// Discovery gating applies here too — unlisted only visible if
+		// you explicitly know the slug and pass discovery check.
+		if !shouldShowInDiscovery(u.Discovery, viewer != nil) {
+			// allow direct-link access to unlisted: if user typed the
+			// slug, they "know" the URL — skip discovery gate.
+			// (Same logic /<slug> uses.)
+		}
+
+		identity, err := guestIdentity()
+		if err != nil {
+			continue
+		}
+		opts := livekit.ViewerOptions{
+			Identity:    identity,
+			Room:        slug,
+			TTL:         6 * time.Hour,
+			DisplayName: "Guest",
+			CanChat:     false, // multi-view = watch-only, no chat clutter
+		}
+		if viewer != nil {
+			opts.DisplayName = viewer.GlobalName
+		}
+		token, err := h.livekit.ViewerToken(opts)
+		if err != nil {
+			continue
+		}
+		cells = append(cells, cell{
+			Slug:         slug,
+			DisplayName:  u.GlobalName,
+			LiveKitToken: token,
+			Title:        u.Title,
+		})
+	}
+
+	h.render(w, "multi.html", map[string]any{
+		"Cells":            cells,
+		"Viewer":           viewer,
+		"LiveKitPublicURL": h.livekit.PublicURL(),
+	})
 }
 
 // DashboardLive returns just the live badge — polled by HTMX every 10s.

@@ -48,16 +48,27 @@
 
         <section class="channel-info">
           <div class="channel-head">
-            <h1>{{.Channel.GlobalName}}</h1>
+            <h1>{{if .Channel.Title}}{{.Channel.Title}}{{else}}{{.Channel.GlobalName}}{{end}}</h1>
             {{template "_live_badge.html" .}}
           </div>
+          {{if .Channel.Title}}
+          <p class="channel-byline">
+            by <strong>{{.Channel.GlobalName}}</strong> &middot;
+            <a href="/{{.Channel.Slug}}"><code>winton.tv/{{.Channel.Slug}}</code></a>
+          </p>
+          {{else}}
           <p class="muted">winton.tv/<code>{{.Channel.Slug}}</code></p>
+          {{end}}
+          {{if .Channel.Description}}
+          <div class="channel-description">{{.Channel.Description}}</div>
+          {{end}}
         </section>
       </div>
 
       <aside class="chat-side">
         <div class="chat-head">
           <h3>Chat</h3>
+          <span class="chat-viewers"><span id="viewer-count">0</span> watching</span>
         </div>
         <div id="chat-messages" class="chat-messages" aria-live="polite">
           <div class="chat-system">Welcome to <strong>{{.Channel.Slug}}</strong>'s chat.</div>
@@ -87,7 +98,7 @@
   </footer>
 
   <script id="lk-config" type="application/json">
-    {"url": "{{.LiveKitPublicURL}}", "token": "{{.LiveKitToken}}", "room": "{{.Channel.Slug}}", "canChat": {{.CanChat}}}
+    {"url": "{{.LiveKitPublicURL}}", "token": "{{.LiveKitToken}}", "room": "{{.Channel.Slug}}", "canChat": {{.CanChat}}, "liveStreamsURL": "/api/live-streams"}
   </script>
 </body>
 </html>
