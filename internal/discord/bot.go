@@ -79,12 +79,21 @@ func (b *Bot) Close() error {
 // ─────────────────────── handlers ───────────────────────
 
 func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
+	b.logger.Info("discord ready event",
+		"guild_count", len(r.Guilds),
+		"session_id", r.SessionID,
+		"user", r.User.Username)
+	matched := false
 	for _, g := range r.Guilds {
+		b.logger.Info("ready: guild",
+			"id", g.ID, "name", g.Name,
+			"voice_states", len(g.VoiceStates), "channels", len(g.Channels),
+			"matches", g.ID == b.guildID)
 		if g.ID != b.guildID {
 			continue
 		}
+		matched = true
 		b.mu.Lock()
-		// reset voice state map and refill from READY snapshot
 		b.userToCh = make(map[string]string, len(g.VoiceStates))
 		for _, vs := range g.VoiceStates {
 			if vs.ChannelID != "" {
@@ -95,7 +104,10 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 		b.logger.Info("discord ready: voice states snapshotted",
 			"voice_count", len(g.VoiceStates))
 	}
-	// Fetch channel list separately (READY only has IDs sometimes)
+	if !matched {
+		b.logger.Warn("discord ready: target guild NOT in ready event — bot might not be a member of guild_id "+b.guildID,
+			"guild_id_expected", b.guildID)
+	}
 	b.refreshChannels()
 }
 
@@ -108,6 +120,11 @@ func (b *Bot) onDisconnect(s *discordgo.Session, d *discordgo.Disconnect) {
 }
 
 func (b *Bot) onVoiceStateUpdate(s *discordgo.Session, vsu *discordgo.VoiceStateUpdate) {
+	b.logger.Info("voice state update",
+		"guild_id", vsu.GuildID,
+		"user_id", vsu.UserID,
+		"channel_id", vsu.ChannelID,
+		"matches_target", vsu.GuildID == b.guildID)
 	if vsu.GuildID != b.guildID {
 		return
 	}
@@ -150,16 +167,21 @@ func (b *Bot) onChannelDelete(s *discordgo.Session, c *discordgo.ChannelDelete) 
 func (b *Bot) refreshChannels() {
 	chans, err := b.session.GuildChannels(b.guildID)
 	if err != nil {
-		b.logger.Warn("discord: refresh channels", "err", err)
+		b.logger.Warn("discord: refresh channels — bot may lack VIEW_CHANNEL or guild access",
+			"guild_id", b.guildID, "err", err)
 		return
 	}
+	voiceCount := 0
 	b.mu.Lock()
-	defer b.mu.Unlock()
 	for _, c := range chans {
 		if c.Type == discordgo.ChannelTypeGuildVoice {
 			b.channels[c.ID] = c
+			voiceCount++
 		}
 	}
+	b.mu.Unlock()
+	b.logger.Info("discord channels refreshed",
+		"total", len(chans), "voice", voiceCount)
 }
 
 // ─────────────────────── API for handlers ───────────────────────
