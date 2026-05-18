@@ -20,27 +20,27 @@
 
   <main>
     <section class="hero hero-narrow">
-      <h1>Sign in with Discord</h1>
+      <h1>Sign in</h1>
       <p class="lede">
-        Discord OAuth is landing in <strong>V1.2</strong>. For now this page is a placeholder.
+        winton-tv uses Discord OAuth. You must be a member of the
+        Winton guild to stream or to post in chat.
       </p>
-      <div class="placeholder-card">
-        <p>
-          When V1.2 ships, this button will start the Discord OAuth flow,
-          verify your Winton guild membership, and drop you into your
-          dashboard to claim a channel slug.
-        </p>
-        <button class="btn btn-primary" disabled>Login with Discord &mdash; coming soon</button>
+
+      {{if .Denied}}
+      <div class="form-error" role="alert">
+        Sign-in cancelled. <a href="/auth/discord">Try again?</a>
       </div>
+      {{end}}
+
+      <a class="btn btn-primary" href="/auth/discord">
+        Login with Discord
+      </a>
       <p class="back-link"><a href="/">&larr; Back home</a></p>
     </section>
   </main>
 
   <footer class="site-footer">
-    <p>
-      Open source &middot;
-      <a href="https://github.com/CreedsCode/winton-tv">GitHub</a>
-    </p>
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
   </footer>
 </body>
 </html>

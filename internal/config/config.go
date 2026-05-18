@@ -1,55 +1,80 @@
 // Package config loads runtime configuration from environment variables.
 //
-// New fields should default to safe development values so `go run` works
-// without any .env file, and should return errors only for values that
-// would silently misbehave if missing in production.
+// Production-first: every required var must be set or Load returns an error.
+// No dev fallbacks for credentials/URLs — supply a .env locally if needed.
 package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
+	"sort"
 	"strings"
 )
 
 type Config struct {
-	Port string
-	Env  string // "development" | "production"
+	Port    string
+	BaseURL string // full origin, e.g. https://winton.derc.io
 
-	// --- added in feat/discord-oauth ---
-	// DiscordClientID     string
-	// DiscordClientSecret string
-	// DiscordGuildID      string
-	// DiscordRedirectURL  string
+	DiscordClientID     string
+	DiscordClientSecret string
+	DiscordGuildID      string
 
-	// --- added in feat/livekit-tokens ---
-	// LiveKitURL    string
-	// LiveKitAPIKey string
-	// LiveKitSecret string
+	DatabaseURL string
 
-	// --- added in feat/postgres-store ---
-	// DatabaseURL string
-
-	// --- added in feat/discord-oauth (sessions) ---
-	// SessionSecret string
+	// --- added in feat/v1.3 ---
+	// LiveKitURL       string
+	// LiveKitPublicURL string
+	// LiveKitAPIKey    string
+	// LiveKitSecret    string
 }
 
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port: getEnv("PORT", "8080"),
-		Env:  strings.ToLower(getEnv("ENV", "development")),
+		Port:                env("PORT", "8080"),
+		BaseURL:             env("BASE_URL", ""),
+		DiscordClientID:     env("DISCORD_CLIENT_ID", ""),
+		DiscordClientSecret: env("DISCORD_CLIENT_SECRET", ""),
+		DiscordGuildID:      env("DISCORD_GUILD_ID", ""),
+		DatabaseURL:         env("DATABASE_URL", ""),
 	}
 
-	if cfg.Env != "development" && cfg.Env != "production" {
-		return nil, fmt.Errorf("ENV must be 'development' or 'production', got %q", cfg.Env)
+	required := map[string]string{
+		"BASE_URL":              cfg.BaseURL,
+		"DISCORD_CLIENT_ID":     cfg.DiscordClientID,
+		"DISCORD_CLIENT_SECRET": cfg.DiscordClientSecret,
+		"DISCORD_GUILD_ID":      cfg.DiscordGuildID,
+		"DATABASE_URL":          cfg.DatabaseURL,
 	}
+	var missing []string
+	for k, v := range required {
+		if v == "" {
+			missing = append(missing, k)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, fmt.Errorf("required env vars missing: %s", strings.Join(missing, ", "))
+	}
+
+	u, err := url.Parse(cfg.BaseURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return nil, fmt.Errorf("BASE_URL invalid: %q", cfg.BaseURL)
+	}
+	cfg.BaseURL = strings.TrimRight(cfg.BaseURL, "/")
+
 	return cfg, nil
 }
 
-func getEnv(key, fallback string) string {
-	if v, ok := os.LookupEnv(key); ok && v != "" {
-		return v
-	}
-	return fallback
+// DiscordCallbackURL is the full redirect URL Discord posts back to.
+// Must match a redirect URI registered in the Discord application.
+func (c *Config) DiscordCallbackURL() string {
+	return c.BaseURL + "/auth/discord/callback"
 }
 
-func (c *Config) IsProd() bool { return c.Env == "production" }
+func env(k, def string) string {
+	if v, ok := os.LookupEnv(k); ok && v != "" {
+		return v
+	}
+	return def
+}

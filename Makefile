@@ -1,6 +1,7 @@
-.PHONY: dev build run test vet tidy fmt docker docker-run clean
+.PHONY: dev build run test vet tidy fmt docker docker-run db-up db-down db-shell clean
 
-# Local dev — runs the server with `go run`, hot reload not included
+# ─── Go ──────────────────────────────────────────────────────────
+
 dev:
 	go run ./cmd/server
 
@@ -23,11 +24,31 @@ tidy:
 fmt:
 	gofmt -s -w .
 
+# ─── Docker (full stack: app + postgres) ────────────────────────
+
 docker:
 	docker build -t winton-tv:dev .
 
-docker-run: docker
-	docker run --rm -p 8080:8080 winton-tv:dev
+docker-up:
+	docker compose up --build
+
+docker-down:
+	docker compose down
+
+# ─── DB (postgres only — for `make dev` against host-Go) ────────
+
+db-up:
+	docker compose up -d postgres
+
+db-down:
+	docker compose stop postgres
+
+db-shell:
+	docker compose exec postgres psql -U winton -d winton
+
+db-reset:
+	docker compose down -v postgres
+	docker compose up -d postgres
 
 clean:
 	rm -rf bin/

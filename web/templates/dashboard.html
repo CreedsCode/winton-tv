@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard &mdash; winton-tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>winton-tv</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/{{.User.Slug}}">View channel</a>
+      <form method="POST" action="/logout" class="inline-form">
+        <button class="link-button" type="submit">Sign out</button>
+      </form>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero hero-narrow">
+      <h1>Hey {{.User.GlobalName}}</h1>
+      <p class="lede">
+        Your channel: <a href="/{{.User.Slug}}"><code>winton.tv/{{.User.Slug}}</code></a>
+      </p>
+
+      <div class="placeholder-card">
+        <h3>Stream key &mdash; coming in V1.3</h3>
+        <p>
+          Next vertical wires up LiveKit. You'll see a WHIP URL + bearer token
+          here, paste both into OBS, and go live with sub-500ms latency.
+        </p>
+        <p>
+          For now, this dashboard is just confirmation that your Discord
+          identity is wired up and your slug is claimed.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
+  </footer>
+</body>
+</html>
