@@ -1,0 +1,23 @@
+# LiveKit Server config — winton-tv self-hosted SFU.
+# API keys come from env (LIVEKIT_KEYS env var), not this file, so the file
+# can live in the repo without holding secrets.
+
+port: 7880
+
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 50100
+  use_external_ip: true        # auto-detect public IP for ICE candidates
+  # For Dokploy/prod with a known public IP, override via env:
+  # LIVEKIT_RTC_NODE_IP=<public.ip.address>
+
+redis:
+  address: redis:6379
+
+logging:
+  level: info
+  pion_level: warn
+  json: true
+
+# room and turn config left at defaults

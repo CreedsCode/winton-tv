@@ -1,0 +1,12 @@
+{{define "_live_badge.html"}}
+<div class="live-badge {{if .Live}}is-live{{else}}is-offline{{end}}"
+     hx-get="/dashboard/live"
+     hx-trigger="every 10s"
+     hx-swap="outerHTML">
+  {{if .Live}}
+    <span class="live-dot"></span>LIVE
+  {{else}}
+    OFFLINE
+  {{end}}
+</div>
+{{end}}

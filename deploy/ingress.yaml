@@ -1,0 +1,20 @@
+# LiveKit Ingress config — handles WHIP (OBS) + RTMP + URL pull
+# and pushes the media into a LiveKit room as a participant.
+#
+# api_key/api_secret come from env (INGRESS_API_KEY / INGRESS_API_SECRET).
+# whip_base_url / rtmp_base_url come from env so prod can advertise the
+# public URL while dev uses localhost.
+
+log_level: info
+ws_url: ws://livekit:7880
+
+redis:
+  address: redis:6379
+
+rtmp_port: 1935
+whip_port: 8082
+http_relay_port: 9090
+
+# whip_base_url / rtmp_base_url overridden by env in compose:
+#   INGRESS_WHIP_BASE_URL=https://ingress.example.com/x
+#   INGRESS_RTMP_BASE_URL=rtmp://ingress.example.com:1935/x

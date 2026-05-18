@@ -22,11 +22,19 @@ type Config struct {
 
 	DatabaseURL string
 
-	// --- added in feat/v1.3 ---
-	// LiveKitURL       string
-	// LiveKitPublicURL string
-	// LiveKitAPIKey    string
-	// LiveKitSecret    string
+	// --- LiveKit ---
+	// LiveKitURL is the internal SFU URL the *backend* uses for the SDK
+	// (RoomService, signing) — typically the docker-network URL like
+	// ws://livekit:7880.
+	LiveKitURL string
+	// LiveKitPublicURL is what the *browser* (viewer JS SDK) connects to.
+	// Public, TLS, e.g. wss://livekit.winton.derc.io.
+	LiveKitPublicURL string
+	LiveKitAPIKey    string
+	LiveKitAPISecret string
+	// LiveKitIngressURL is the internal Ingress Twirp API the backend
+	// hits to provision per-user ingresses. Typically http://ingress:9090.
+	LiveKitIngressURL string
 }
 
 func Load() (*Config, error) {
@@ -37,6 +45,11 @@ func Load() (*Config, error) {
 		DiscordClientSecret: env("DISCORD_CLIENT_SECRET", ""),
 		DiscordGuildID:      env("DISCORD_GUILD_ID", ""),
 		DatabaseURL:         env("DATABASE_URL", ""),
+		LiveKitURL:          env("LIVEKIT_URL", ""),
+		LiveKitPublicURL:    env("LIVEKIT_PUBLIC_URL", ""),
+		LiveKitAPIKey:       env("LIVEKIT_API_KEY", ""),
+		LiveKitAPISecret:    env("LIVEKIT_API_SECRET", ""),
+		LiveKitIngressURL:   env("LIVEKIT_INGRESS_URL", ""),
 	}
 
 	required := map[string]string{
@@ -45,6 +58,11 @@ func Load() (*Config, error) {
 		"DISCORD_CLIENT_SECRET": cfg.DiscordClientSecret,
 		"DISCORD_GUILD_ID":      cfg.DiscordGuildID,
 		"DATABASE_URL":          cfg.DatabaseURL,
+		"LIVEKIT_URL":           cfg.LiveKitURL,
+		"LIVEKIT_PUBLIC_URL":    cfg.LiveKitPublicURL,
+		"LIVEKIT_API_KEY":       cfg.LiveKitAPIKey,
+		"LIVEKIT_API_SECRET":    cfg.LiveKitAPISecret,
+		"LIVEKIT_INGRESS_URL":   cfg.LiveKitIngressURL,
 	}
 	var missing []string
 	for k, v := range required {

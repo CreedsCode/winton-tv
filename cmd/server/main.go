@@ -13,6 +13,7 @@ import (
 	"github.com/CreedsCode/winton-tv/internal/auth"
 	"github.com/CreedsCode/winton-tv/internal/config"
 	"github.com/CreedsCode/winton-tv/internal/handlers"
+	"github.com/CreedsCode/winton-tv/internal/livekit"
 	"github.com/CreedsCode/winton-tv/internal/session"
 	"github.com/CreedsCode/winton-tv/internal/store"
 
@@ -45,14 +46,21 @@ func main() {
 	}
 	defer st.Close()
 
-	// scs needs a *sql.DB — wrap the pgxpool with the stdlib adapter.
 	sqlDB := stdlib.OpenDBFromPool(st.Pool())
 	defer sqlDB.Close()
 
 	sessMgr := session.New(sqlDB, cfg.BaseURL)
 	authH := auth.New(cfg, st, sessMgr, logger)
 
-	hs, err := handlers.New(cfg, st, logger)
+	lk := livekit.New(livekit.Config{
+		URL:        cfg.LiveKitURL,
+		PublicURL:  cfg.LiveKitPublicURL,
+		APIKey:     cfg.LiveKitAPIKey,
+		APISecret:  cfg.LiveKitAPISecret,
+		IngressURL: cfg.LiveKitIngressURL,
+	})
+
+	hs, err := handlers.New(cfg, st, lk, logger)
 	if err != nil {
 		logger.Error("handlers init failed", "err", err)
 		os.Exit(1)
@@ -78,7 +86,7 @@ func main() {
 	r.Get("/auth/discord/callback", authH.Callback)
 	r.Post("/logout", authH.Logout)
 
-	// authed, no slug required (onboarding itself)
+	// authed, no slug required
 	r.Group(func(r chi.Router) {
 		r.Use(authH.RequireSession)
 		r.Get("/onboarding", hs.OnboardingGet)
@@ -89,6 +97,9 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(authH.RequireSlug)
 		r.Get("/dashboard", hs.Dashboard)
+		r.Post("/dashboard/setup-stream", hs.DashboardSetupStream)
+		r.Post("/dashboard/rotate-stream", hs.DashboardRotateStream)
+		r.Get("/dashboard/live", hs.DashboardLive)
 	})
 
 	srv := &http.Server{

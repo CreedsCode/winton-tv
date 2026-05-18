@@ -11,22 +11,24 @@ import (
 
 	"github.com/CreedsCode/winton-tv/internal/auth"
 	"github.com/CreedsCode/winton-tv/internal/config"
+	"github.com/CreedsCode/winton-tv/internal/livekit"
 	"github.com/CreedsCode/winton-tv/internal/store"
 )
 
 type Handler struct {
-	cfg    *config.Config
-	store  *store.Store
-	logger *slog.Logger
-	tmpl   *template.Template
+	cfg     *config.Config
+	store   *store.Store
+	livekit *livekit.Client
+	logger  *slog.Logger
+	tmpl    *template.Template
 }
 
-func New(cfg *config.Config, st *store.Store, logger *slog.Logger) (*Handler, error) {
+func New(cfg *config.Config, st *store.Store, lk *livekit.Client, logger *slog.Logger) (*Handler, error) {
 	tmpl, err := template.ParseGlob("web/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
-	return &Handler{cfg: cfg, store: st, logger: logger, tmpl: tmpl}, nil
+	return &Handler{cfg: cfg, store: st, livekit: lk, logger: logger, tmpl: tmpl}, nil
 }
 
 // ─────────────────────── public pages ───────────────────────
@@ -38,7 +40,6 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	// If already authed, skip the login page.
 	if u := auth.Current(r); u != nil {
 		dest := "/dashboard"
 		if u.Slug == nil || *u.Slug == "" {
@@ -57,19 +58,88 @@ func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
-// ─────────────────────── authed pages ───────────────────────
+// ─────────────────────── dashboard ───────────────────────
 
 func (h *Handler) Dashboard(w http.ResponseWriter, r *http.Request) {
+	u := auth.Current(r)
+	live, err := h.livekit.IsLive(r.Context(), *u.Slug)
+	if err != nil {
+		h.logger.Warn("live check (dashboard render)", "slug", *u.Slug, "err", err)
+	}
 	h.render(w, "dashboard.html", map[string]any{
-		"User": auth.Current(r),
+		"User": u,
+		"Live": live,
 	})
+}
+
+// DashboardSetupStream creates a WHIP ingress for the user if they don't
+// have one. Idempotent — second click after creation just redirects.
+func (h *Handler) DashboardSetupStream(w http.ResponseWriter, r *http.Request) {
+	u := auth.Current(r)
+	if u.IngressID != nil && *u.IngressID != "" {
+		http.Redirect(w, r, "/dashboard", http.StatusFound)
+		return
+	}
+	if err := h.createAndPersistIngress(r, u); err != nil {
+		h.logger.Error("setup stream", "uid", u.ID, "err", err)
+		http.Error(w, "failed to create stream (LiveKit Ingress unreachable?) — try again", http.StatusBadGateway)
+		return
+	}
+	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+// DashboardRotateStream destroys the current ingress and provisions a new
+// one. Used when a key leaks or for routine hygiene.
+func (h *Handler) DashboardRotateStream(w http.ResponseWriter, r *http.Request) {
+	u := auth.Current(r)
+	if u.IngressID != nil && *u.IngressID != "" {
+		if err := h.livekit.DeleteIngress(r.Context(), *u.IngressID); err != nil {
+			h.logger.Warn("delete ingress on rotate", "id", *u.IngressID, "err", err)
+		}
+	}
+	if err := h.store.ClearStreamCredentials(r.Context(), u.ID); err != nil {
+		h.logger.Error("clear stream creds", "uid", u.ID, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	// Re-create (need to reload user so IngressID is now nil)
+	u.IngressID = nil
+	if err := h.createAndPersistIngress(r, u); err != nil {
+		h.logger.Error("rotate -> create", "uid", u.ID, "err", err)
+		http.Error(w, "failed to create new stream — try again", http.StatusBadGateway)
+		return
+	}
+	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+// DashboardLive returns just the live badge — polled by HTMX every 10s.
+func (h *Handler) DashboardLive(w http.ResponseWriter, r *http.Request) {
+	u := auth.Current(r)
+	live, err := h.livekit.IsLive(r.Context(), *u.Slug)
+	if err != nil {
+		h.logger.Warn("live check (poll)", "slug", *u.Slug, "err", err)
+	}
+	h.render(w, "_live_badge.html", map[string]any{"Live": live})
+}
+
+func (h *Handler) createAndPersistIngress(r *http.Request, u *store.User) error {
+	creds, err := h.livekit.CreateWHIPIngress(r.Context(), *u.Slug)
+	if err != nil {
+		return fmt.Errorf("create ingress: %w", err)
+	}
+	if err := h.store.SetStreamCredentials(r.Context(), u.ID, creds.IngressID, creds.StreamKey, creds.WhipURL); err != nil {
+		// Orphan ingress cleanup, best-effort
+		_ = h.livekit.DeleteIngress(r.Context(), creds.IngressID)
+		return fmt.Errorf("persist creds: %w", err)
+	}
+	return nil
 }
 
 // ─────────────────────── onboarding (slug picker) ───────────────────────
 
 var (
-	slugRe         = regexp.MustCompile(`^[a-z0-9_-]{3,32}$`)
-	reservedSlugs  = mustReservedSet()
+	slugRe        = regexp.MustCompile(`^[a-z0-9_-]{3,32}$`)
+	reservedSlugs = mustReservedSet()
 )
 
 func (h *Handler) OnboardingGet(w http.ResponseWriter, r *http.Request) {
