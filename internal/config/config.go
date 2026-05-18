@@ -66,7 +66,8 @@ func Load() (*Config, error) {
 		"LIVEKIT_PUBLIC_URL":    cfg.LiveKitPublicURL,
 		"LIVEKIT_API_KEY":       cfg.LiveKitAPIKey,
 		"LIVEKIT_API_SECRET":    cfg.LiveKitAPISecret,
-		"WHIP_BASE_URL":         cfg.WhipBaseURL,
+		// WHIP_BASE_URL intentionally optional. If unset, the dashboard
+		// shows a "URL not configured" error instead of breaking app boot.
 	}
 	var missing []string
 	for k, v := range required {
