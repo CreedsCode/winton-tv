@@ -475,6 +475,58 @@ main {
   color: #6ed99b !important;
 }
 
+/* ───────────────────── settings card (privacy etc.) ───────────────────── */
+.settings-card {
+  margin-top: 2rem;
+  padding: 1.5rem 2rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.settings-card h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.settings-card .muted { margin-bottom: 1.25rem; }
+
+.discovery-form {
+  display: grid;
+  gap: 0.6rem;
+}
+.discovery-form .radio {
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+.discovery-form .radio:hover {
+  border-color: var(--fg-muted);
+}
+.discovery-form .radio input[type="radio"] {
+  margin: 0.25rem 0 0;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.discovery-form .radio:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(88, 101, 242, 0.06);
+}
+.discovery-form .radio strong {
+  display: block;
+  font-size: 0.95rem;
+  margin-bottom: 0.15rem;
+}
+.discovery-form .radio .muted {
+  display: block;
+  font-size: 0.85rem;
+  margin: 0;
+}
+
 /* ───────────────────── danger zone (regenerate) ───────────────────── */
 .danger-zone {
   margin-top: 2.5rem;

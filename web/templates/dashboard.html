@@ -85,6 +85,37 @@
         </div>
       </section>
 
+      <section class="settings-card">
+        <h2>Channel privacy</h2>
+        <p class="muted">Who can find your channel on the landing-page discovery grid. Your channel page (<code>winton.tv/{{.User.Slug}}</code>) is always reachable by direct link.</p>
+        <form class="discovery-form"
+              hx-post="/dashboard/discovery"
+              hx-trigger="change"
+              hx-swap="none">
+          <label class="radio">
+            <input type="radio" name="discovery" value="public" {{if eq .User.Discovery "public"}}checked{{end}}>
+            <div>
+              <strong>Public</strong>
+              <span class="muted">Anyone &mdash; logged in or not &mdash; sees your live channel on the landing page.</span>
+            </div>
+          </label>
+          <label class="radio">
+            <input type="radio" name="discovery" value="members" {{if eq .User.Discovery "members"}}checked{{end}}>
+            <div>
+              <strong>Members only</strong>
+              <span class="muted">Only signed-in Winton guild members see the discovery card. Anonymous visitors won't.</span>
+            </div>
+          </label>
+          <label class="radio">
+            <input type="radio" name="discovery" value="unlisted" {{if eq .User.Discovery "unlisted"}}checked{{end}}>
+            <div>
+              <strong>Unlisted</strong>
+              <span class="muted">Never appears in discovery. Only people you give the URL to can find your stream.</span>
+            </div>
+          </label>
+        </form>
+      </section>
+
       <section class="danger-zone">
         <h3>Regenerate stream key</h3>
         <p class="muted">
