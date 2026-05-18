@@ -1,15 +1,16 @@
 # winton-tv full stack — app + postgres + redis + livekit + ingress.
 # Designed for Dokploy "compose deploy from GitHub". Set secrets via
-# Dokploy env vars (or a .env on the server). Required:
+# Dokploy env vars. Required:
 #   DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET / DISCORD_GUILD_ID
-#   BASE_URL                        e.g. https://winton.derc.io
-#   LIVEKIT_API_KEY / _SECRET       generate with `livekit-server generate-keys`
-#   LIVEKIT_PUBLIC_URL              e.g. wss://livekit.winton.derc.io
-#   INGRESS_WHIP_BASE_URL           e.g. https://ingress.winton.derc.io/x
+#   BASE_URL                       e.g. https://tv.winton.pro
+#   LIVEKIT_API_KEY / _SECRET      generate with `livekit-server generate-keys`
+#   LIVEKIT_PUBLIC_URL             e.g. wss://lk.winton.pro
+#   INGRESS_WHIP_BASE_URL          e.g. https://whip.winton.pro/w
 #
 # Optional (default to in-cluster values):
-#   DATABASE_URL                    defaults to postgres in this compose
-#   LIVEKIT_URL                     defaults to ws://livekit:7880 (internal)
+#   DATABASE_URL                   defaults to postgres in this compose
+#   LIVEKIT_URL                    defaults to ws://livekit:7880 (internal)
+#   INGRESS_RTMP_BASE_URL          default falls back to localhost
 
 services:
   app:
@@ -64,15 +65,17 @@ services:
     volumes:
       - redisdata:/data
 
+  # LiveKit server config supports env vars natively via LIVEKIT_KEYS, etc.,
+  # so we still mount the static yaml.
   livekit:
     image: livekit/livekit-server:v1.7
     container_name: winton-livekit
     restart: unless-stopped
     command: ["--config", "/etc/livekit.yaml"]
     ports:
-      - "7880:7880"          # signaling (HTTP/WS) — front with Traefik+TLS in prod
-      - "7881:7881"          # ICE/TCP fallback
-      - "50000-50100:50000-50100/udp"  # RTC media (UDP) — needs router forward in prod
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
     environment:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
     volumes:
@@ -80,25 +83,40 @@ services:
     depends_on:
       - redis
 
+  # LiveKit Ingress reads almost nothing from env — config has to be a yaml
+  # file. We use compose `configs:` with `content:` so env vars get
+  # interpolated into the yaml at compose-up time. The standalone file
+  # `deploy/ingress.yaml` is kept only as a reference for developers.
   ingress:
     image: livekit/ingress:v1.4
     container_name: winton-ingress
     restart: unless-stopped
     command: ["--config", "/etc/ingress.yaml"]
     ports:
-      - "1935:1935"          # RTMP
-      - "8082:8082"          # WHIP (OBS posts here) — front with Traefik+TLS in prod
-      - "9090:9090"          # internal Twirp API for the app to call
+      - "1935:1935"
+      - "8082:8082"
     environment:
       INGRESS_API_KEY: "${LIVEKIT_API_KEY}"
       INGRESS_API_SECRET: "${LIVEKIT_API_SECRET}"
-      INGRESS_WHIP_BASE_URL: "${INGRESS_WHIP_BASE_URL:-http://localhost:8082/x}"
-      INGRESS_RTMP_BASE_URL: "${INGRESS_RTMP_BASE_URL:-rtmp://localhost:1935/x}"
-    volumes:
-      - ./deploy/ingress.yaml:/etc/ingress.yaml:ro
+    configs:
+      - source: ingress_config
+        target: /etc/ingress.yaml
     depends_on:
       - livekit
       - redis
+
+configs:
+  ingress_config:
+    content: |
+      log_level: info
+      ws_url: ws://livekit:7880
+      redis:
+        address: redis:6379
+      rtmp_port: 1935
+      whip_port: 8082
+      http_relay_port: 9090
+      whip_base_url: ${INGRESS_WHIP_BASE_URL:-http://localhost:8082/w}
+      rtmp_base_url: ${INGRESS_RTMP_BASE_URL:-rtmp://localhost:1935/x}
 
 volumes:
   pgdata:

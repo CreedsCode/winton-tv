@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
   <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" defer></script>
+  <script src="/static/dashboard.js" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -35,54 +36,77 @@
       </div>
 
       {{if .User.StreamKey}}
-      <section class="stream-card">
-        <h2>Stream credentials</h2>
+      <section class="obs-setup">
+        <h2>Stream from OBS</h2>
+
+        <ol class="obs-steps">
+          <li>
+            <span class="step-n">1</span>
+            <div>Open <strong>OBS</strong> &rarr; <strong>Settings</strong> &rarr; <strong>Stream</strong>.</div>
+          </li>
+          <li>
+            <span class="step-n">2</span>
+            <div>Set <em>Service</em> to <strong class="hl">WHIP</strong>.</div>
+          </li>
+          <li>
+            <span class="step-n">3</span>
+            <div>Paste the values below into <em>Server</em> and <em>Bearer Token</em>.</div>
+          </li>
+          <li>
+            <span class="step-n">4</span>
+            <div>Click <strong>OK</strong>, then <strong>Start Streaming</strong>. The LIVE badge above will turn red within ~10s.</div>
+          </li>
+        </ol>
+
+        <div class="obs-fields">
+          <div class="obs-field">
+            <label>Server <small>(paste into OBS &rarr; Server)</small></label>
+            {{if .User.StreamWhipURL}}
+              <div class="copy-row">
+                <input type="text" readonly value="{{.User.StreamWhipURL}}" data-copy>
+                <button class="btn btn-secondary" type="button" data-copy-btn>Copy</button>
+              </div>
+            {{else}}
+              <div class="form-error">
+                Server URL not configured. Click <strong>Regenerate</strong> below, or set
+                <code>INGRESS_WHIP_BASE_URL</code> in the ingress config and redeploy.
+              </div>
+            {{end}}
+          </div>
+
+          <div class="obs-field">
+            <label>Bearer Token <small>(paste into OBS &rarr; Bearer Token. Keep secret.)</small></label>
+            <div class="copy-row">
+              <input type="password" readonly value="{{.User.StreamKey}}" data-copy data-secret>
+              <button class="btn btn-secondary" type="button" data-show-btn>Show</button>
+              <button class="btn btn-secondary" type="button" data-copy-btn>Copy</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="danger-zone">
+        <h3>Regenerate stream key</h3>
         <p class="muted">
-          Paste these into OBS &rarr; Settings &rarr; Stream. Service:
-          <strong>WHIP</strong>.
+          Creates a new bearer token and URL. The old key stops working immediately
+          &mdash; any active stream cuts. Use if your key leaks.
         </p>
-
-        <div class="cred-row">
-          <label for="whip-url">WHIP server URL</label>
-          <div class="cred-value">
-            <input type="text" id="whip-url" readonly value="{{.User.StreamWhipURL}}">
-            <button class="btn btn-secondary" type="button"
-                    onclick="navigator.clipboard.writeText(document.getElementById('whip-url').value)">Copy</button>
-          </div>
-        </div>
-
-        <div class="cred-row">
-          <label for="stream-key">Bearer token / stream key</label>
-          <div class="cred-value">
-            <input type="password" id="stream-key" readonly value="{{.User.StreamKey}}">
-            <button class="btn btn-secondary" type="button"
-                    onclick="document.getElementById('stream-key').type='text'">Show</button>
-            <button class="btn btn-secondary" type="button"
-                    onclick="navigator.clipboard.writeText(document.getElementById('stream-key').value)">Copy</button>
-          </div>
-        </div>
-
-        <details class="rotate">
-          <summary>Rotate stream key</summary>
-          <p class="muted">
-            Rotating destroys the current WHIP credentials and creates new
-            ones. Any active stream will be cut. Use if your key leaks.
-          </p>
-          <form method="POST" action="/dashboard/rotate-stream">
-            <button class="btn btn-danger" type="submit"
-                    onclick="return confirm('Rotate stream key? Any active stream will end.')">Rotate now</button>
-          </form>
-        </details>
+        <form method="POST" action="/dashboard/rotate-stream">
+          <button class="btn btn-danger" type="submit"
+                  onclick="return confirm('Regenerate stream key? Any active stream will end immediately.')">
+            Regenerate stream key
+          </button>
+        </form>
       </section>
       {{else}}
       <section class="stream-card setup">
-        <h2>Set up streaming</h2>
+        <h2>One-click setup</h2>
         <p class="muted">
-          One click and you'll get a WHIP URL + token to paste into OBS.
-          We provision a LiveKit ingress for your channel.
+          Click to provision a WHIP ingress for your channel. We'll show you a
+          server URL + token to paste into OBS. Takes ~2 seconds.
         </p>
         <form method="POST" action="/dashboard/setup-stream">
-          <button class="btn btn-primary" type="submit">Create stream credentials</button>
+          <button class="btn btn-primary" type="submit">Set up streaming</button>
         </form>
       </section>
       {{end}}
