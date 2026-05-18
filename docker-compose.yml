@@ -94,8 +94,10 @@ services:
     restart: unless-stopped
     command: ["--config", "/etc/ingress.yaml"]
     ports:
-      - "1935:1935"
-      - "8082:8082"
+      - "1935:1935"                      # RTMP
+      - "8082:8082"                      # WHIP HTTP signaling (Traefik+TLS in prod)
+      - "7885:7885/udp"                  # WHIP RTC media (UDP) — must be forwarded on router
+      - "7886:7886"                      # WHIP RTC ICE TCP fallback
     environment:
       INGRESS_API_KEY: "${LIVEKIT_API_KEY}"
       INGRESS_API_SECRET: "${LIVEKIT_API_SECRET}"
@@ -124,6 +126,14 @@ configs:
       # needs *some* base set or it errors.
       whip_base_url: "${INGRESS_WHIP_BASE_URL:-http://localhost:8082}"
       rtmp_base_url: "${INGRESS_RTMP_BASE_URL:-rtmp://localhost:1935/x}"
+      # WHIP RTC media transport. Pinned ports (not random) so they can be
+      # exposed in compose + forwarded on the router. use_external_ip lets
+      # Ingress STUN-detect its public IP and put it in ICE candidates so
+      # OBS can connect through NAT.
+      rtc_config:
+        udp_port: 7885
+        tcp_port: 7886
+        use_external_ip: true
 
 volumes:
   pgdata:
