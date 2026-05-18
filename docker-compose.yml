@@ -110,14 +110,20 @@ configs:
   ingress_config:
     content: |
       log_level: info
+      api_key: "${LIVEKIT_API_KEY}"
+      api_secret: "${LIVEKIT_API_SECRET}"
       ws_url: ws://livekit:7880
       redis:
         address: redis:6379
       rtmp_port: 1935
       whip_port: 8082
       http_relay_port: 9090
-      whip_base_url: ${INGRESS_WHIP_BASE_URL:-http://localhost:8082/w}
-      rtmp_base_url: ${INGRESS_RTMP_BASE_URL:-rtmp://localhost:1935/x}
+      # Ingress listens for WHIP at /{stream_key} on its own root. The base
+      # URL is what it advertises in IngressInfo.Url responses — we don't
+      # rely on that field (app constructs URLs itself), but Ingress still
+      # needs *some* base set or it errors.
+      whip_base_url: "${INGRESS_WHIP_BASE_URL:-http://localhost:8082}"
+      rtmp_base_url: "${INGRESS_RTMP_BASE_URL:-rtmp://localhost:1935/x}"
 
 volumes:
   pgdata:
