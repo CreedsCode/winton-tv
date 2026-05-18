@@ -1,0 +1,35 @@
+# Local dev compose.
+# Postgres + LiveKit get added in their respective feature PRs.
+services:
+  app:
+    build: .
+    image: winton-tv:dev
+    container_name: winton-tv
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      ENV: "development"
+    # Uncomment when feat/postgres-store lands:
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+
+  # postgres:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: winton
+  #     POSTGRES_PASSWORD: winton
+  #     POSTGRES_DB: winton
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U winton"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+
+# volumes:
+#   pgdata:

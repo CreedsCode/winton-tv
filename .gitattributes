@@ -1,0 +1,16 @@
+# Default: normalize text files to LF in the repo, auto-convert on Windows checkout.
+* text=auto eol=lf
+
+# Files that MUST stay LF (break otherwise)
+*.sh        text eol=lf
+*.go        text eol=lf
+Makefile    text eol=lf
+Dockerfile  text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+# Binary
+*.png       binary
+*.jpg       binary
+*.ico       binary
+*.woff2     binary
