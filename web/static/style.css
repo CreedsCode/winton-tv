@@ -18,6 +18,13 @@
 /* ───────────────────── reset / base ───────────────────── */
 * { box-sizing: border-box; }
 
+html {
+  /* Always reserve scrollbar space so layout doesn't shift when tab/
+     route content varies in height. Prevents the "phantom scrollbar
+     appearing on tab switch" the dashboard had. */
+  overflow-y: scroll;
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -975,6 +982,8 @@ main {
 }
 .metadata-form label:first-of-type { margin-top: 0; }
 .metadata-form input[type="text"],
+.metadata-form input[type="url"],
+.metadata-form input[type="email"],
 .metadata-form textarea {
   width: 100%;
   background: var(--bg-3);
@@ -987,6 +996,8 @@ main {
   resize: vertical;
 }
 .metadata-form input[type="text"]:focus,
+.metadata-form input[type="url"]:focus,
+.metadata-form input[type="email"]:focus,
 .metadata-form textarea:focus {
   outline: none;
   border-color: var(--accent);
@@ -1104,6 +1115,10 @@ main {
   font-size: 0.9rem;
 }
 .multi-mute:hover { background: rgba(0,0,0,0.85); }
+.multi-mute.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+}
 
 /* ───────────────────── multi-view header ───────────────────── */
 .multi-header {
