@@ -54,7 +54,7 @@
     <section class="hero hero-narrow">
       <h1>Build a multi-view</h1>
       <p class="lede">
-        Pick channels to watch side-by-side. Up to 9 at once.
+        Pick channels to watch side-by-side. Up to 12 at once.
       </p>
 
       <div id="multi-builder" class="multi-builder">
@@ -131,7 +131,7 @@
               if (goBtn.dataset.url) location.href = goBtn.dataset.url;
             });
             allBtn.addEventListener('click', function () {
-              location.href = '/multi?s=' + slugs.slice(0, 9).join(',');
+              location.href = '/multi?s=' + slugs.slice(0, 12).join(',');
             });
           })
           .catch(function () {

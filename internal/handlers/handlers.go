@@ -424,8 +424,8 @@ func (h *Handler) Multi(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	parts := strings.Split(raw, ",")
-	if len(parts) > 9 {
-		parts = parts[:9] // sanity cap; 3x3 grid max for V1
+	if len(parts) > 12 {
+		parts = parts[:12] // sanity cap; 4x3 grid max
 	}
 
 	viewer := auth.Current(r)
