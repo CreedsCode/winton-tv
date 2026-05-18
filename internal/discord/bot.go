@@ -50,6 +50,7 @@ func New(token, guildID string, logger *slog.Logger) (*Bot, error) {
 	}
 
 	s.AddHandler(b.onReady)
+	s.AddHandler(b.onGuildCreate)
 	s.AddHandler(b.onVoiceStateUpdate)
 	s.AddHandler(b.onChannelCreate)
 	s.AddHandler(b.onChannelUpdate)
@@ -113,6 +114,45 @@ func (b *Bot) onReady(s *discordgo.Session, r *discordgo.Ready) {
 
 func (b *Bot) onResumed(s *discordgo.Session, r *discordgo.Resumed) {
 	b.logger.Info("discord resumed")
+}
+
+// onGuildCreate handles the GUILD_CREATE event that fires for every
+// guild the bot is in shortly after READY. This is where Discord
+// actually delivers the voice states + channel list — READY only sends
+// stub guild objects (id, no name, empty voice_states/channels).
+//
+// Fires:
+//   - Once per guild on initial connect (right after READY)
+//   - Whenever the bot is added to a new guild
+//   - When the bot regains access to a previously-unavailable guild
+func (b *Bot) onGuildCreate(s *discordgo.Session, g *discordgo.GuildCreate) {
+	if g.ID != b.guildID {
+		return
+	}
+	voiceCount := 0
+	channelCount := 0
+	b.mu.Lock()
+	// Re-snapshot voice states from the authoritative GUILD_CREATE payload
+	b.userToCh = make(map[string]string, len(g.VoiceStates))
+	for _, vs := range g.VoiceStates {
+		if vs.ChannelID != "" {
+			b.userToCh[vs.UserID] = vs.ChannelID
+			voiceCount++
+		}
+	}
+	// Snapshot voice channels too
+	for _, c := range g.Channels {
+		if c.Type == discordgo.ChannelTypeGuildVoice {
+			b.channels[c.ID] = c
+			channelCount++
+		}
+	}
+	b.mu.Unlock()
+	b.logger.Info("guild create",
+		"name", g.Name,
+		"voice_states", voiceCount,
+		"voice_channels", channelCount,
+		"total_channels", len(g.Channels))
 }
 
 func (b *Bot) onDisconnect(s *discordgo.Session, d *discordgo.Disconnect) {
