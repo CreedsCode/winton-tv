@@ -29,7 +29,7 @@
 
   <main class="channel-main">
     <div class="player-wrap">
-      <video id="lk-video" class="player-video" autoplay playsinline muted></video>
+      <video id="lk-video" class="player-video" autoplay playsinline muted controls controlslist="nodownload"></video>
       <div id="player-overlay" class="player-overlay {{if .Live}}is-connecting{{else}}is-offline{{end}}">
         <div class="overlay-content">
           {{if .Live}}
