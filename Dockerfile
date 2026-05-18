@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
+# Official Alpine Go images set GOTOOLCHAIN=local, which refuses to
+# auto-fetch a newer toolchain when go.mod demands one. Override so the
+# build doesn't break when the 1.26-alpine tag temporarily resolves to
+# an older patch (which has happened on Docker Hub tag drift).
+ENV GOTOOLCHAIN=auto
 WORKDIR /src
 
 # Cache deps
