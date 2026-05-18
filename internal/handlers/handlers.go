@@ -2,17 +2,21 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/CreedsCode/winton-tv/internal/auth"
 	"github.com/CreedsCode/winton-tv/internal/config"
 	"github.com/CreedsCode/winton-tv/internal/livekit"
 	"github.com/CreedsCode/winton-tv/internal/store"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
@@ -56,6 +60,69 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
+}
+
+// ─────────────────────── channel (public viewer page) ───────────────────────
+
+// Channel resolves a slug -> user, mints a viewer JWT, and renders the
+// watch page. Anonymous viewers are allowed (V1 requirement). Identity
+// is a random "guest-xxxxx" so LiveKit can tell viewers apart.
+func (h *Handler) Channel(w http.ResponseWriter, r *http.Request) {
+	slug := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "slug")))
+
+	// Defensive — chi shouldn't route reserved slugs here (they're earlier
+	// in the trie), but guard anyway.
+	if slug == "" || reservedSlugs[slug] {
+		http.NotFound(w, r)
+		return
+	}
+
+	user, err := h.store.GetUserBySlug(r.Context(), slug)
+	if err != nil {
+		h.logger.Error("channel: get user by slug", "slug", slug, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	if user == nil {
+		w.WriteHeader(http.StatusNotFound)
+		h.render(w, "channel_404.html", map[string]any{"Slug": slug})
+		return
+	}
+
+	viewerIdentity, err := guestIdentity()
+	if err != nil {
+		h.logger.Error("guest identity", "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	token, err := h.livekit.ViewerToken(viewerIdentity, *user.Slug, 6*time.Hour)
+	if err != nil {
+		h.logger.Error("viewer token", "slug", slug, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	live, err := h.livekit.IsLive(r.Context(), *user.Slug)
+	if err != nil {
+		h.logger.Warn("channel live check", "slug", slug, "err", err)
+	}
+
+	h.render(w, "channel.html", map[string]any{
+		"Channel":          user,
+		"Viewer":           auth.Current(r), // may be nil (anonymous)
+		"LiveKitToken":     token,
+		"LiveKitPublicURL": h.livekit.PublicURL(),
+		"Live":             live,
+	})
+}
+
+func guestIdentity() (string, error) {
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "guest-" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 // ─────────────────────── dashboard ───────────────────────
