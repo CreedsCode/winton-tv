@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin &middot; Audit log &mdash; Winton Tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>Winton Tv</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/dashboard">Dashboard</a>
+      <form method="POST" action="/logout" class="inline-form">
+        <button class="link-button" type="submit">Sign out</button>
+      </form>
+    </nav>
+  </header>
+
+  <main class="admin-main">
+    <nav class="admin-nav">
+      <a class="{{if eq .Active "users"}}is-active{{end}}" href="/admin/users">👥 Users</a>
+      <a class="{{if eq .Active "streams"}}is-active{{end}}" href="/admin/streams">📺 Live now</a>
+      <a class="{{if eq .Active "audit"}}is-active{{end}}" href="/admin/audit">📋 Audit log</a>
+    </nav>
+
+    <section class="admin-section">
+      <h1>Audit log</h1>
+      <p class="muted">Last 200 admin actions, newest first.</p>
+
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Admin</th>
+            <th>Action</th>
+            <th>Target</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Actions}}
+          <tr>
+            <td class="muted">{{.CreatedAt.Format "2006-01-02 15:04"}}</td>
+            <td><strong>{{.AdminName}}</strong></td>
+            <td><span class="badge badge-action">{{.Action}}</span></td>
+            <td>
+              {{if .TargetSlug}}<a href="/u/{{.TargetSlug}}"><code>/{{.TargetSlug}}</code></a>{{end}}
+              {{if and .TargetName .TargetSlug}} &middot; {{end}}
+              {{if .TargetName}}{{.TargetName}}{{end}}
+            </td>
+            <td class="muted">{{.Reason}}</td>
+          </tr>
+          {{else}}
+          <tr><td colspan="5" class="muted" style="text-align:center;padding:2rem">No actions yet.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
+  </footer>
+</body>
+</html>
