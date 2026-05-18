@@ -55,6 +55,7 @@ func New(cfg *config.Config, st *store.Store, lk *livekit.Client, bot *discordbo
 type LiveCard struct {
 	Slug        string
 	DisplayName string
+	Title       string // stream title; empty -> template falls back to DisplayName as the headline
 	ViewerCount int
 }
 
@@ -118,6 +119,7 @@ func (h *Handler) liveCards(r *http.Request) ([]LiveCard, error) {
 		cards = append(cards, LiveCard{
 			Slug:        s.Slug,
 			DisplayName: user.GlobalName,
+			Title:       user.Title,
 			ViewerCount: s.ViewerCount,
 		})
 	}

@@ -59,8 +59,10 @@
             </span>
           </div>
           <div class="live-card-info">
-            <h3>{{.DisplayName}}</h3>
-            <p class="muted">winton.tv/{{.Slug}}</p>
+            <h3>{{if .Title}}{{.Title}}{{else}}{{.DisplayName}}{{end}}</h3>
+            <p class="muted">
+              {{if .Title}}{{.DisplayName}} &middot; {{end}}<code>/{{.Slug}}</code>
+            </p>
           </div>
         </a>
         {{end}}
