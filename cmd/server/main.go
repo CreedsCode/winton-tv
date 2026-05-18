@@ -100,6 +100,7 @@ func main() {
 		r.Get("/dashboard", hs.Dashboard)
 		r.Post("/dashboard/setup-stream", hs.DashboardSetupStream)
 		r.Post("/dashboard/rotate-stream", hs.DashboardRotateStream)
+		r.Post("/dashboard/discovery", hs.DashboardSetDiscovery)
 		r.Get("/dashboard/live", hs.DashboardLive)
 	})
 
