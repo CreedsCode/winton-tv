@@ -91,9 +91,26 @@
     }
 
     function hideOverlay() {
+      log('hide overlay');
       overlay.hidden = true;
       overlay.style.display = 'none';
+      overlay.classList.remove('is-connecting', 'is-offline');
     }
+
+    // Belt-and-suspenders: also hide overlay once the <video> actually
+    // starts rendering frames (covers SDK-timing edge cases where
+    // TrackSubscribed fires before the overlay element is settled).
+    videoEl.addEventListener('playing', function () {
+      log('video.playing event — hiding overlay');
+      hideOverlay();
+    });
+
+    // Manual escape hatch — click overlay to dismiss if it gets stuck.
+    overlay.addEventListener('click', function () {
+      log('overlay clicked — manual dismiss');
+      hideOverlay();
+    });
+    overlay.style.cursor = 'pointer';
 
     function isPublisher(p) {
       return p && p.identity === cfg.room;
