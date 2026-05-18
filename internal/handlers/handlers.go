@@ -529,29 +529,53 @@ func (h *Handler) CIndex(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CView renders a multi-view grid for the streamers currently in a voice
-// channel who are also live on winton-tv. Anonymous viewers allowed.
+// CView renders a multi-view grid for the streamers currently in one or
+// more Discord voice channels (comma-separated IDs in the path). Use
+// case: tournaments where teams are split across channels.
+//   /c/<id>            single channel
+//   /c/<id1>,<id2>,..  combined view across channels (dedup by user)
 func (h *Handler) CView(w http.ResponseWriter, r *http.Request) {
 	if h.discord == nil {
 		http.Error(w, "voice channel features disabled (DISCORD_BOT_TOKEN unset)", http.StatusNotImplemented)
 		return
 	}
-	channelID := chi.URLParam(r, "channelID")
-	if channelID == "" {
+	raw := chi.URLParam(r, "channelID")
+	if raw == "" {
 		http.Redirect(w, r, "/c", http.StatusFound)
 		return
 	}
 
-	name, ok := h.discord.ChannelName(channelID)
-	if !ok {
+	ids := strings.Split(raw, ",")
+	var (
+		channelNames []string
+		seenUser     = make(map[string]bool) // dedup users across channels
+		memberIDs    []string
+		totalInVoice int
+	)
+	for _, cid := range ids {
+		cid = strings.TrimSpace(cid)
+		if cid == "" {
+			continue
+		}
+		name, ok := h.discord.ChannelName(cid)
+		if !ok {
+			continue
+		}
+		channelNames = append(channelNames, name)
+		for _, uid := range h.discord.UsersInChannel(cid) {
+			totalInVoice++
+			if !seenUser[uid] {
+				seenUser[uid] = true
+				memberIDs = append(memberIDs, uid)
+			}
+		}
+	}
+	if len(channelNames) == 0 {
 		w.WriteHeader(http.StatusNotFound)
-		h.render(w, "channel_404.html", map[string]any{"Slug": "c/" + channelID})
+		h.render(w, "channel_404.html", map[string]any{"Slug": "c/" + raw})
 		return
 	}
 
-	memberIDs := h.discord.UsersInChannel(channelID)
-
-	// Live set
 	streams, _ := h.livekit.ListLive(r.Context())
 	liveSet := make(map[string]bool, len(streams))
 	for _, s := range streams {
@@ -573,7 +597,7 @@ func (h *Handler) CView(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if !liveSet[*u.Slug] {
-			continue // only show currently-streaming members in the grid
+			continue
 		}
 		identity, err := guestIdentity()
 		if err != nil {
@@ -601,12 +625,19 @@ func (h *Handler) CView(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	header := "#" + strings.Join(channelNames, " + #")
+	subtitle := fmt.Sprintf("%d in voice · %d streaming", totalInVoice, len(cells))
+	if len(channelNames) > 1 {
+		subtitle = fmt.Sprintf("%d voice channels · %d in voice · %d streaming",
+			len(channelNames), totalInVoice, len(cells))
+	}
+
 	h.render(w, "multi.html", map[string]any{
 		"Cells":            cells,
 		"Viewer":           viewer,
 		"LiveKitPublicURL": h.livekit.PublicURL(),
-		"Header":           "#" + name,
-		"Subtitle":         fmt.Sprintf("%d in voice · %d streaming", len(memberIDs), len(cells)),
+		"Header":           header,
+		"Subtitle":         subtitle,
 	})
 }
 

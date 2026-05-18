@@ -30,33 +30,45 @@
       <h1>Discord voice channels</h1>
       <p class="lede">
         Who's in voice right now &middot; click a channel to watch everyone
-        in it who's streaming.
+        in it who's streaming. Tournament? Tick multiple channels and
+        watch them combined.
       </p>
     </section>
 
     <section class="section">
       {{if .Channels}}
-      <div class="vc-grid">
-        {{range .Channels}}
-        <a class="vc-card{{if gt .LiveCount 0}} has-live{{end}}" href="/c/{{.ID}}">
-          <div class="vc-head">
-            <span class="vc-name">🔊 {{.Name}}</span>
-            <span class="vc-count">{{.Total}} in voice</span>
-          </div>
-          {{if gt .LiveCount 0}}
-          <div class="vc-live">
-            <span class="live-pill"><span class="live-dot"></span>{{.LiveCount}} streaming</span>
-          </div>
-          {{else if .Streamers}}
-          <div class="vc-meta">
-            {{len .Streamers}} winton-tv {{if eq (len .Streamers) 1}}member{{else}}members{{end}} (none live)
-          </div>
-          {{else}}
-          <div class="vc-meta">No winton-tv members in this channel</div>
+      <form id="c-multi-form" class="c-multi-form">
+        <div class="vc-grid">
+          {{range .Channels}}
+          <label class="vc-card{{if gt .LiveCount 0}} has-live{{end}}">
+            <input type="checkbox" class="vc-check" value="{{.ID}}">
+            <a class="vc-link" href="/c/{{.ID}}" title="Watch {{.Name}}">Watch &rarr;</a>
+            <div class="vc-head">
+              <span class="vc-name">🔊 {{.Name}}</span>
+              <span class="vc-count">{{.Total}} in voice</span>
+            </div>
+            {{if gt .LiveCount 0}}
+            <div class="vc-live">
+              <span class="live-pill"><span class="live-dot"></span>{{.LiveCount}} streaming</span>
+            </div>
+            {{else if .Streamers}}
+            <div class="vc-meta">
+              {{len .Streamers}} winton-tv {{if eq (len .Streamers) 1}}member{{else}}members{{end}} (none live)
+            </div>
+            {{else}}
+            <div class="vc-meta">No winton-tv members in this channel</div>
+            {{end}}
+          </label>
           {{end}}
-        </a>
-        {{end}}
-      </div>
+        </div>
+
+        <div class="c-multi-actions">
+          <button id="c-watch-combined" type="button" class="btn btn-primary" disabled>
+            Watch combined (<span id="c-count">0</span>)
+          </button>
+          <span class="muted">tick 2+ channels to merge them into one grid</span>
+        </div>
+      </form>
       {{else}}
       <div class="empty-state">
         <p class="empty-heading">No one's in voice right now.</p>
@@ -69,5 +81,40 @@
   <footer class="site-footer">
     <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
   </footer>
+
+  <script>
+    (function () {
+      const form    = document.getElementById('c-multi-form');
+      if (!form) return;
+      const counter = document.getElementById('c-count');
+      const goBtn   = document.getElementById('c-watch-combined');
+
+      function picked() {
+        return Array.from(form.querySelectorAll('.vc-check:checked'))
+          .map(function (el) { return el.value; });
+      }
+
+      function update() {
+        const p = picked();
+        counter.textContent = p.length;
+        goBtn.disabled = p.length === 0;
+      }
+
+      form.addEventListener('change', update);
+      goBtn.addEventListener('click', function () {
+        const p = picked();
+        if (p.length === 0) return;
+        location.href = '/c/' + p.join(',');
+      });
+
+      // Prevent the checkbox-label click from following the inner <a> link
+      // when the user is actually trying to tick — clicking the card itself
+      // toggles the checkbox; clicking the explicit "Watch →" link still
+      // navigates to that single channel.
+      form.querySelectorAll('.vc-link').forEach(function (a) {
+        a.addEventListener('click', function (e) { e.stopPropagation(); });
+      });
+    })();
+  </script>
 </body>
 </html>
