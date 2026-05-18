@@ -80,6 +80,8 @@ func main() {
 	r.Get("/", hs.Index)
 	r.Get("/login", hs.Login)
 	r.Get("/healthz", hs.Healthz)
+	r.Get("/multi", hs.Multi)
+	r.Get("/api/live-streams", hs.APILiveStreams)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
 	// auth
@@ -101,6 +103,7 @@ func main() {
 		r.Post("/dashboard/setup-stream", hs.DashboardSetupStream)
 		r.Post("/dashboard/rotate-stream", hs.DashboardRotateStream)
 		r.Post("/dashboard/discovery", hs.DashboardSetDiscovery)
+		r.Post("/dashboard/metadata", hs.DashboardSetMetadata)
 		r.Get("/dashboard/live", hs.DashboardLive)
 	})
 

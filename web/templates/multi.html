@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multi-view &mdash; winton-tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5/dist/livekit-client.umd.min.js" defer></script>
+  <script src="/static/multi-viewer.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>winton-tv</span>
+    </a>
+    <nav class="site-nav">
+      {{if .Viewer}}
+        <a href="/dashboard">Dashboard</a>
+        <form method="POST" action="/logout" class="inline-form">
+          <button class="link-button" type="submit">Sign out</button>
+        </form>
+      {{else}}
+        <a href="/login">Sign in</a>
+      {{end}}
+    </nav>
+  </header>
+
+  <main class="multi-main">
+    {{if .Cells}}
+    <div class="multi-grid" data-count="{{len .Cells}}">
+      {{range .Cells}}
+      <div class="multi-cell" data-slug="{{.Slug}}" data-token="{{.LiveKitToken}}">
+        <video autoplay playsinline muted class="multi-video"></video>
+        <div class="multi-overlay">
+          <div class="multi-label">
+            <span class="multi-name">{{if .Title}}{{.Title}}{{else}}{{.DisplayName}}{{end}}</span>
+            <a class="multi-slug" href="/{{.Slug}}">/{{.Slug}}</a>
+          </div>
+          <button class="multi-mute" type="button" title="Unmute">🔇</button>
+        </div>
+      </div>
+      {{end}}
+    </div>
+    {{else}}
+    <div class="empty-state">
+      <p class="empty-heading">No channels in this multi-view.</p>
+      <p class="empty-sub">Pass <code>?s=alice,bob,charlie</code> in the URL.</p>
+    </div>
+    {{end}}
+  </main>
+
+  <script id="lk-config" type="application/json">
+    {"url": "{{.LiveKitPublicURL}}"}
+  </script>
+</body>
+</html>

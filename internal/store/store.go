@@ -78,6 +78,10 @@ type User struct {
 	// Default "public" via migration. Controls whether the channel appears
 	// on the discovery grid; the channel page itself is always accessible.
 	Discovery string
+
+	// Stream metadata (V1.5) — both default '' via migration.
+	Title       string
+	Description string
 }
 
 // Discovery values. Mirror the CHECK constraint in migration 004.
@@ -91,7 +95,8 @@ const userColumns = `
     id, discord_id, username, global_name, avatar_hash, slug,
     is_admin, banned, created_at,
     ingress_id, stream_key, stream_whip_url, stream_created_at,
-    discovery
+    discovery,
+    title, description
 `
 
 func scanUser(row pgx.Row) (*User, error) {
@@ -101,6 +106,7 @@ func scanUser(row pgx.Row) (*User, error) {
 		&u.IsAdmin, &u.Banned, &u.CreatedAt,
 		&u.IngressID, &u.StreamKey, &u.StreamWhipURL, &u.StreamCreatedAt,
 		&u.Discovery,
+		&u.Title, &u.Description,
 	); err != nil {
 		return nil, err
 	}
@@ -186,6 +192,20 @@ func (s *Store) SetStreamCredentials(ctx context.Context, userID int64, ingressI
 		       updated_at        = now()
 		 WHERE id = $4
 	`, ingressID, streamKey, whipURL, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+// SetUserMetadata updates title + description. Caller validates lengths.
+func (s *Store) SetUserMetadata(ctx context.Context, userID int64, title, description string) error {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE users SET title = $1, description = $2, updated_at = now() WHERE id = $3
+	`, title, description, userID)
 	if err != nil {
 		return err
 	}

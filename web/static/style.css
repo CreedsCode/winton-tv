@@ -876,6 +876,227 @@ main {
 }
 .chat-login p { margin: 0 0 0.75rem; font-size: 0.85rem; }
 
+/* ───────────────────── chat header viewer count ───────────────────── */
+.chat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.chat-viewers {
+  font-size: 0.78rem;
+  color: var(--fg-muted);
+  padding: 0.15rem 0.55rem;
+  background: var(--bg-3);
+  border-radius: 999px;
+}
+
+/* ───────────────────── chat header line (crown / name / pill / cam) ─── */
+.chat-line {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.1rem;
+}
+.chat-crown {
+  font-size: 0.85rem;
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.4));
+}
+.chat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0.5rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  color: var(--fg-muted);
+  text-decoration: none;
+}
+.chat-pill:hover {
+  color: var(--fg);
+  border-color: var(--fg-muted);
+  text-decoration: none;
+}
+.chat-pill.is-live {
+  border-color: rgba(242, 63, 91, 0.45);
+  color: #ff8593;
+  background: rgba(242, 63, 91, 0.08);
+}
+.chat-cam { font-size: 0.7rem; }
+
+.chat-msg.is-owner {
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.06), transparent 60%);
+}
+
+/* ───────────────────── channel title / byline / description ───────── */
+.channel-head h1 {
+  /* allow longer titles than the global name fallback */
+  font-size: 1.6rem;
+  line-height: 1.2;
+}
+.channel-byline {
+  margin: 0.25rem 0 0;
+  color: var(--fg-muted);
+  font-size: 0.95rem;
+}
+.channel-byline strong { color: var(--fg); }
+.channel-description {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  white-space: pre-wrap;
+  color: var(--fg);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+/* ───────────────────── metadata form (dashboard) ───────────────────── */
+.metadata-form label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+  margin: 1rem 0 0.4rem;
+}
+.metadata-form label:first-of-type { margin-top: 0; }
+.metadata-form input[type="text"],
+.metadata-form textarea {
+  width: 100%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.65rem 0.85rem;
+  color: var(--fg);
+  font-family: inherit;
+  font-size: 0.95rem;
+  resize: vertical;
+}
+.metadata-form input[type="text"]:focus,
+.metadata-form textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.metadata-form .field-help {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  color: var(--fg-dim);
+}
+.metadata-form button[type="submit"] {
+  margin-top: 1.25rem;
+}
+
+/* ───────────────────── toast ───────────────────── */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  padding: 0.65rem 1.1rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--fg);
+  opacity: 0;
+  transition: opacity 240ms, transform 240ms;
+  z-index: 1000;
+  pointer-events: none;
+}
+.toast.toast-in {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+.toast.is-ok   { border-color: rgba(110, 217, 155, 0.4); color: #6ed99b; }
+.toast.is-err  { border-color: rgba(242, 63, 91, 0.4);   color: #ff8593; }
+
+/* ───────────────────── multi-view grid ───────────────────── */
+.multi-main {
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+.multi-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+.multi-grid[data-count="1"] { grid-template-columns: 1fr; }
+.multi-grid[data-count="2"] { grid-template-columns: 1fr 1fr; }
+.multi-grid[data-count="3"] { grid-template-columns: repeat(3, 1fr); }
+.multi-grid[data-count="4"] { grid-template-columns: 1fr 1fr; }
+.multi-grid[data-count="5"],
+.multi-grid[data-count="6"] { grid-template-columns: repeat(3, 1fr); }
+.multi-grid[data-count="7"],
+.multi-grid[data-count="8"],
+.multi-grid[data-count="9"] { grid-template-columns: repeat(3, 1fr); }
+
+.multi-cell {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.multi-cell.is-live { border-color: rgba(242, 63, 91, 0.5); }
+.multi-cell.is-error { border-color: rgba(242, 63, 91, 0.4); opacity: 0.5; }
+.multi-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.multi-overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 0.5rem 0.75rem;
+  background: linear-gradient(0deg, rgba(0,0,0,0.7), rgba(0,0,0,0));
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+.multi-overlay > * { pointer-events: auto; }
+.multi-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.multi-name {
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.multi-slug {
+  color: var(--fg-muted);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+.multi-slug:hover { color: white; }
+.multi-mute {
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: white;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.multi-mute:hover { background: rgba(0,0,0,0.85); }
+
 /* ───────────────────── mobile ───────────────────── */
 @media (max-width: 900px) {
   .watch-layout {
@@ -884,6 +1105,12 @@ main {
   .chat-side {
     max-height: 50vh;
   }
+  .multi-grid[data-count="3"],
+  .multi-grid[data-count="5"],
+  .multi-grid[data-count="6"],
+  .multi-grid[data-count="7"],
+  .multi-grid[data-count="8"],
+  .multi-grid[data-count="9"] { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 600px) {
   .hero { padding-top: 3rem; }

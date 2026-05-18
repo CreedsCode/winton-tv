@@ -1,7 +1,11 @@
-// Dashboard interactivity: copy-to-clipboard with visual confirmation,
-// show/hide for the secret token. Vanilla JS, no deps.
+// Dashboard interactivity:
+//   - copy-to-clipboard with visual confirmation
+//   - show/hide for the secret token
+//   - global toast on HTMX successful requests (e.g. settings saved)
+// Vanilla JS, no deps beyond htmx (loaded by the template).
 
 (function () {
+  // ─────────────── copy + show/hide ───────────────
   function flash(btn, label, ms) {
     const original = btn.textContent;
     btn.textContent = label;
@@ -12,7 +16,6 @@
     }, ms || 1500);
   }
 
-  // Wire up data-copy-btn buttons. They copy the closest input[data-copy] value.
   document.addEventListener('click', function (e) {
     const btn = e.target.closest('[data-copy-btn]');
     if (!btn) return;
@@ -21,7 +24,6 @@
       flash(btn, 'Nothing to copy', 1200);
       return;
     }
-    // Use modern clipboard API with a fallback for non-HTTPS.
     const text = input.value;
     if (navigator.clipboard && window.isSecureContext) {
       navigator.clipboard.writeText(text)
@@ -46,7 +48,6 @@
     window.getSelection().removeAllRanges();
   }
 
-  // Show/hide toggle for secret inputs.
   document.addEventListener('click', function (e) {
     const btn = e.target.closest('[data-show-btn]');
     if (!btn) return;
@@ -58,6 +59,33 @@
     } else {
       input.type = 'password';
       btn.textContent = 'Show';
+    }
+  });
+
+  // ─────────────── toast on HTMX success ───────────────
+  let toastTimer = null;
+  function showToast(text, kind) {
+    const el = document.getElementById('toast');
+    if (!el) return;
+    el.textContent = text;
+    el.className = 'toast is-' + (kind || 'ok');
+    el.hidden = false;
+    requestAnimationFrame(function () { el.classList.add('toast-in'); });
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      el.classList.remove('toast-in');
+      setTimeout(function () { el.hidden = true; }, 240);
+    }, 1800);
+  }
+
+  // htmx fires events on document.body
+  document.body.addEventListener('htmx:afterRequest', function (e) {
+    const x = e.detail && e.detail.xhr;
+    if (!x) return;
+    if (x.status >= 200 && x.status < 300) {
+      showToast('Saved', 'ok');
+    } else {
+      showToast('Save failed (' + x.status + ')', 'err');
     }
   });
 })();
