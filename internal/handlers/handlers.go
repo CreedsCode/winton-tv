@@ -10,10 +10,12 @@ import (
 	"log/slog"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/CreedsCode/winton-tv/internal/auth"
+	"github.com/CreedsCode/winton-tv/internal/chat"
 	"github.com/CreedsCode/winton-tv/internal/config"
 	discordbot "github.com/CreedsCode/winton-tv/internal/discord"
 	"github.com/CreedsCode/winton-tv/internal/livekit"
@@ -37,16 +39,17 @@ type Handler struct {
 	store   *store.Store
 	livekit *livekit.Client
 	discord *discordbot.Bot // optional — nil if DISCORD_BOT_TOKEN unset
+	chatHub *chat.Hub
 	logger  *slog.Logger
 	tmpl    *template.Template
 }
 
-func New(cfg *config.Config, st *store.Store, lk *livekit.Client, bot *discordbot.Bot, logger *slog.Logger) (*Handler, error) {
+func New(cfg *config.Config, st *store.Store, lk *livekit.Client, bot *discordbot.Bot, chatHub *chat.Hub, logger *slog.Logger) (*Handler, error) {
 	tmpl, err := template.ParseGlob("web/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
-	return &Handler{cfg: cfg, store: st, livekit: lk, discord: bot, logger: logger, tmpl: tmpl}, nil
+	return &Handler{cfg: cfg, store: st, livekit: lk, discord: bot, chatHub: chatHub, logger: logger, tmpl: tmpl}, nil
 }
 
 // ─────────────────────── public pages ───────────────────────
@@ -648,6 +651,146 @@ func (h *Handler) CView(w http.ResponseWriter, r *http.Request) {
 		"Header":           header,
 		"Subtitle":         subtitle,
 	})
+}
+
+// ─────────────────────── chat (persistent) ───────────────────────
+
+// ChatHistory returns the last N messages for a channel (oldest-first).
+func (h *Handler) ChatHistory(w http.ResponseWriter, r *http.Request) {
+	slug := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "slug")))
+	if slug == "" {
+		http.NotFound(w, r)
+		return
+	}
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	msgs, err := h.store.RecentChatMessages(r.Context(), slug, limit)
+	if err != nil {
+		h.logger.Error("chat history", "slug", slug, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = json.NewEncoder(w).Encode(map[string]any{"messages": msgs})
+}
+
+// ChatSend accepts a new chat message and broadcasts it to subscribers.
+// Auth required (matches V1.7 chat permission). Server enriches sender
+// data so client can't spoof avatar/slug/owner-crown.
+func (h *Handler) ChatSend(w http.ResponseWriter, r *http.Request) {
+	sender := auth.Current(r)
+	if sender == nil {
+		http.Error(w, "auth required", http.StatusUnauthorized)
+		return
+	}
+	if sender.Banned {
+		http.Error(w, "banned", http.StatusForbidden)
+		return
+	}
+	slug := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "slug")))
+	if slug == "" {
+		http.NotFound(w, r)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	text := strings.TrimSpace(r.FormValue("text"))
+	if text == "" {
+		http.Error(w, "empty message", http.StatusBadRequest)
+		return
+	}
+	if len(text) > 500 {
+		http.Error(w, "message too long (max 500 chars)", http.StatusBadRequest)
+		return
+	}
+
+	channelUser, err := h.store.GetUserBySlug(r.Context(), slug)
+	if err != nil || channelUser == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	senderSlug := ""
+	if sender.Slug != nil {
+		senderSlug = *sender.Slug
+	}
+	isOwner := channelUser.Slug != nil && senderSlug == *channelUser.Slug
+
+	msg, err := h.store.InsertChatMessage(r.Context(), store.ChatMessage{
+		ChannelSlug:     slug,
+		SenderUserID:    sender.ID,
+		SenderName:      sender.GlobalName,
+		SenderAvatarURL: discordAvatarURL(sender),
+		SenderSlug:      senderSlug,
+		IsOwner:         isOwner,
+		Text:            text,
+	})
+	if err != nil {
+		h.logger.Error("chat insert", "slug", slug, "uid", sender.ID, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	h.chatHub.Publish(slug, *msg)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// ChatStream is the SSE endpoint that streams new messages live.
+// Open with EventSource. Heartbeat every 30s to keep proxies happy.
+func (h *Handler) ChatStream(w http.ResponseWriter, r *http.Request) {
+	slug := strings.ToLower(strings.TrimSpace(chi.URLParam(r, "slug")))
+	if slug == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable nginx buffering if proxied
+
+	sub := h.chatHub.Subscribe(slug)
+	defer h.chatHub.Unsubscribe(slug, sub)
+
+	// Initial connect comment so browsers know the stream is alive.
+	fmt.Fprint(w, ": connected\n\n")
+	flusher.Flush()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case msg, ok := <-sub:
+			if !ok {
+				return
+			}
+			b, err := json.Marshal(msg)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(w, "event: chat\ndata: %s\n\n", b)
+			flusher.Flush()
+		case <-ticker.C:
+			fmt.Fprint(w, ": heartbeat\n\n")
+			flusher.Flush()
+		case <-r.Context().Done():
+			return
+		}
+	}
 }
 
 // DashboardSetProfile persists bio + social_links from the dashboard form.

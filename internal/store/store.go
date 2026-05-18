@@ -440,6 +440,69 @@ func (s *Store) ClearStreamCredentials(ctx context.Context, userID int64) error 
 	return err
 }
 
+// ─────────────────────── chat (V1.8.1: persistence) ───────────────────────
+
+type ChatMessage struct {
+	ID              int64     `json:"id"`
+	ChannelSlug     string    `json:"channel_slug"`
+	SenderUserID    int64     `json:"sender_user_id"`
+	SenderName      string    `json:"sender_name"`
+	SenderAvatarURL string    `json:"sender_avatar_url"`
+	SenderSlug      string    `json:"sender_slug"`
+	IsOwner         bool      `json:"is_owner"`
+	Text            string    `json:"text"`
+	CreatedAt       time.Time `json:"created_at"`
+}
+
+func (s *Store) InsertChatMessage(ctx context.Context, m ChatMessage) (*ChatMessage, error) {
+	row := s.pool.QueryRow(ctx, `
+		INSERT INTO chat_messages
+		    (channel_slug, sender_user_id, sender_name, sender_avatar_url, sender_slug, is_owner, text)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		RETURNING id, created_at
+	`, m.ChannelSlug, m.SenderUserID, m.SenderName, m.SenderAvatarURL, m.SenderSlug, m.IsOwner, m.Text)
+	if err := row.Scan(&m.ID, &m.CreatedAt); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// RecentChatMessages returns the last `limit` messages for a channel,
+// oldest-first (display order).
+func (s *Store) RecentChatMessages(ctx context.Context, channelSlug string, limit int) ([]*ChatMessage, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, channel_slug, sender_user_id, sender_name, sender_avatar_url,
+		       sender_slug, is_owner, text, created_at
+		  FROM chat_messages
+		 WHERE channel_slug = $1
+		 ORDER BY created_at DESC
+		 LIMIT $2
+	`, channelSlug, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []*ChatMessage{}
+	for rows.Next() {
+		var m ChatMessage
+		if err := rows.Scan(
+			&m.ID, &m.ChannelSlug, &m.SenderUserID, &m.SenderName, &m.SenderAvatarURL,
+			&m.SenderSlug, &m.IsOwner, &m.Text, &m.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, &m)
+	}
+	// Reverse to oldest-first for display.
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out, rows.Err()
+}
+
 // ─────────────────────── migrations ───────────────────────
 
 func (s *Store) migrate(ctx context.Context) error {
