@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/CreedsCode/winton-tv/internal/auth"
+	"github.com/CreedsCode/winton-tv/internal/chat"
 	"github.com/CreedsCode/winton-tv/internal/config"
 	discordbot "github.com/CreedsCode/winton-tv/internal/discord"
 	"github.com/CreedsCode/winton-tv/internal/handlers"
@@ -80,7 +81,8 @@ func main() {
 		logger.Info("DISCORD_BOT_TOKEN unset — /c routes disabled")
 	}
 
-	hs, err := handlers.New(cfg, st, lk, bot, logger)
+	chatHub := chat.NewHub()
+	hs, err := handlers.New(cfg, st, lk, bot, chatHub, logger)
 	if err != nil {
 		logger.Error("handlers init failed", "err", err)
 		os.Exit(1)
@@ -104,6 +106,8 @@ func main() {
 	r.Get("/c/{channelID}", hs.CView)
 	r.Get("/u/{slug}", hs.Profile)
 	r.Get("/api/live-streams", hs.APILiveStreams)
+	r.Get("/api/chat/{slug}/history", hs.ChatHistory)
+	r.Get("/api/chat/{slug}/stream", hs.ChatStream)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
 	// auth
@@ -116,6 +120,7 @@ func main() {
 		r.Use(authH.RequireSession)
 		r.Get("/onboarding", hs.OnboardingGet)
 		r.Post("/onboarding", hs.OnboardingPost)
+		r.Post("/api/chat/{slug}", hs.ChatSend)
 	})
 
 	// authed + slug claimed

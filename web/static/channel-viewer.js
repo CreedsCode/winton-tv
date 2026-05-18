@@ -127,8 +127,9 @@
     }
 
     // ─────────────── Chat helpers ───────────────
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder();
+    // V1.8.1: chat is now DB-backed via /api/chat. History loads on
+    // page join, new messages stream in via SSE. Removed the LiveKit
+    // DataChannel chat path entirely.
 
     function escapeHTML(s) {
       return String(s).replace(/[&<>"']/g, function (c) {
@@ -142,53 +143,48 @@
       return 'hsl(' + h + ', 65%, 72%)';
     }
 
-    function parseMeta(raw) {
-      if (!raw) return {};
-      try { return JSON.parse(raw); } catch (e) { return {}; }
-    }
-
     function initialOf(name) {
       const t = (name || '?').trim();
       return t.length ? t[0].toUpperCase() : '?';
     }
 
-    function renderChat(participant, text, opts) {
-      opts = opts || {};
-      const isSelf = !!opts.self;
-      const name = (participant && participant.name) || (isSelf ? 'You' : 'Guest');
-      const meta = parseMeta(participant && participant.metadata);
-      const ident = (participant && participant.identity) || 'self';
-      const color = colorFor(ident);
-      const slug = meta.slug || '';
-      const isOwner = !!meta.is_owner;
-      const isLiveElsewhere = slug && slug !== cfg.room && liveSlugs.has(slug);
+    // Track rendered message IDs to dedupe (history + SSE can overlap
+    // if SSE catches a message that just landed in history).
+    const renderedIds = new Set();
+
+    // renderChat takes a normalised message:
+    //   { id, name, avatarUrl, slug, isOwner, text, identity }
+    function renderChat(m) {
+      if (m.id != null && renderedIds.has(m.id)) return;
+      if (m.id != null) renderedIds.add(m.id);
+
+      const identity = m.identity || ('u-' + (m.slug || m.name || 'x'));
+      const color = colorFor(identity);
+      const isLiveElsewhere = m.slug && m.slug !== cfg.room && liveSlugs.has(m.slug);
 
       const row = document.createElement('div');
-      row.className = 'chat-msg' + (isOwner ? ' is-owner' : '');
+      row.className = 'chat-msg' + (m.isOwner ? ' is-owner' : '');
 
-      // Avatar
       const avatar = document.createElement('div');
       avatar.className = 'chat-avatar';
-      if (meta.avatar_url) {
+      if (m.avatarUrl) {
         const img = document.createElement('img');
-        img.src = meta.avatar_url;
+        img.src = m.avatarUrl;
         img.alt = '';
         avatar.appendChild(img);
       } else {
-        avatar.textContent = initialOf(name);
-        avatar.style.background = 'hsl(' + colorFor(name).match(/\d+/)[0] + ', 30%, 22%)';
+        avatar.textContent = initialOf(m.name);
+        avatar.style.background = 'hsl(' + colorFor(m.name).match(/\d+/)[0] + ', 30%, 22%)';
         avatar.style.color = color;
       }
 
-      // Body
       const body = document.createElement('div');
       body.className = 'chat-body';
 
-      // Header row: crown, name, slug pill, cam icon
       const header = document.createElement('div');
       header.className = 'chat-line';
 
-      if (isOwner) {
+      if (m.isOwner) {
         const crown = document.createElement('span');
         crown.className = 'chat-crown';
         crown.title = 'Channel owner';
@@ -199,16 +195,14 @@
       const nameEl = document.createElement('span');
       nameEl.className = 'chat-name';
       nameEl.style.color = color;
-      nameEl.textContent = name;
+      nameEl.textContent = m.name;
       header.appendChild(nameEl);
 
-      if (slug) {
+      if (m.slug) {
         const pill = document.createElement('a');
         pill.className = 'chat-pill';
-        // V1.8: link to profile, not channel. Channel is "watch", profile
-        // is "who". Profile works whether or not they're live.
-        pill.href = '/u/' + slug;
-        pill.textContent = '/' + slug;
+        pill.href = '/u/' + m.slug;
+        pill.textContent = '/' + m.slug;
         if (isLiveElsewhere) {
           pill.classList.add('is-live');
           const cam = document.createElement('span');
@@ -224,7 +218,7 @@
 
       const textEl = document.createElement('div');
       textEl.className = 'chat-text';
-      textEl.innerHTML = escapeHTML(text);
+      textEl.innerHTML = escapeHTML(m.text);
       body.appendChild(textEl);
 
       row.appendChild(avatar);
@@ -236,6 +230,18 @@
       if (nearBottom) chatList.scrollTop = chatList.scrollHeight;
     }
 
+    function renderFromAPI(srv) {
+      renderChat({
+        id: srv.id,
+        name: srv.sender_name,
+        avatarUrl: srv.sender_avatar_url,
+        slug: srv.sender_slug,
+        isOwner: srv.is_owner,
+        text: srv.text,
+        identity: 'u-' + srv.sender_user_id,
+      });
+    }
+
     function renderSystem(text) {
       const row = document.createElement('div');
       row.className = 'chat-system';
@@ -243,6 +249,35 @@
       chatList.appendChild(row);
       chatList.scrollTop = chatList.scrollHeight;
     }
+
+    // Load last 50 messages on join.
+    fetch('/api/chat/' + cfg.room + '/history?limit=50', { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        (data.messages || []).forEach(renderFromAPI);
+      })
+      .catch(function (e) { log('chat history failed', e); });
+
+    // Live updates via Server-Sent Events. EventSource auto-reconnects
+    // on transient network blips.
+    let chatSSE = null;
+    function startChatStream() {
+      try {
+        chatSSE = new EventSource('/api/chat/' + cfg.room + '/stream');
+        chatSSE.addEventListener('chat', function (ev) {
+          try {
+            const msg = JSON.parse(ev.data);
+            renderFromAPI(msg);
+          } catch (e) { log('chat SSE parse', e); }
+        });
+        chatSSE.onerror = function (ev) {
+          log('chat SSE error (will retry)', ev);
+        };
+      } catch (e) {
+        log('chat SSE failed to start', e);
+      }
+    }
+    startChatStream();
 
     // ─────────────── Room ───────────────
     const room = new LivekitClient.Room({
@@ -293,14 +328,9 @@
       track.detach().forEach(function (el) { el.remove(); });
     });
 
-    room.on(LivekitClient.RoomEvent.DataReceived, function (payload, participant) {
-      let msg;
-      try { msg = JSON.parse(decoder.decode(payload)); }
-      catch (e) { log('bad chat payload', e); return; }
-      if (msg && msg.type === 'chat' && typeof msg.text === 'string') {
-        renderChat(participant, msg.text);
-      }
-    });
+    // V1.8.1: DataChannel chat removed. Chat now goes through
+    // /api/chat/{slug} (POST send) and SSE /api/chat/{slug}/stream
+    // (receive). See the chat helpers section above.
 
     unmuteBtn.addEventListener('click', function () {
       videoEl.muted = false;
@@ -313,12 +343,28 @@
         e.preventDefault();
         const text = chatInput.value.trim();
         if (!text) return;
-        const payload = encoder.encode(JSON.stringify({ type: 'chat', text: text }));
-        room.localParticipant.publishData(payload, { reliable: true }).then(function () {
-          renderChat(room.localParticipant, text, { self: true });
-          chatInput.value = '';
+        const fd = new FormData();
+        fd.append('text', text);
+        // Disable submit while in-flight (rapid duplicate clicks)
+        const submitBtn = chatForm.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+        chatInput.value = '';
+        fetch('/api/chat/' + cfg.room, {
+          method: 'POST',
+          body: fd,
+          credentials: 'same-origin',
+        }).then(function (r) {
+          if (submitBtn) submitBtn.disabled = false;
+          if (!r.ok) {
+            chatInput.value = text; // restore on failure
+            return r.text().then(function (t) { renderSystem('Send failed: ' + (t || r.status)); });
+          }
+          // Success: server fans out via SSE; renderedIds dedupe handles
+          // showing it just once.
         }).catch(function (err) {
-          log('publishData failed', err);
+          if (submitBtn) submitBtn.disabled = false;
+          chatInput.value = text;
+          log('chat send err', err);
           renderSystem('Failed to send. Try again.');
         });
       });
