@@ -44,10 +44,28 @@
         if (isPublisher(p)) cell.classList.remove('is-live');
       });
 
-      muteBt.addEventListener('click', function () {
-        video.muted = !video.muted;
-        muteBt.textContent = video.muted ? '🔇' : '🔊';
-        if (!video.muted) video.play().catch(function () {});
+      // Start muted (autoplay policy). Track state explicitly so the
+      // first click reliably flips audio on — browsers sometimes ignore
+      // muted=false without a clear user gesture, so we force it twice
+      // (set + assert) and rely on the click being the gesture.
+      let muted = true;
+      function applyMuteState() {
+        video.muted = muted;
+        muteBt.textContent = muted ? '🔇' : '🔊';
+        muteBt.classList.toggle('is-active', !muted);
+        muteBt.title = muted ? 'Unmute' : 'Mute';
+      }
+      applyMuteState();
+
+      muteBt.addEventListener('click', function (e) {
+        e.preventDefault();
+        muted = !muted;
+        applyMuteState();
+        if (!muted) {
+          // Re-assert in case the browser autoplay policy clamped it back.
+          video.muted = false;
+          if (video.paused) video.play().catch(function () {});
+        }
       });
 
       room.connect(cfg.url, token, { autoSubscribe: true })
