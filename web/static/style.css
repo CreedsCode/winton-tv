@@ -361,7 +361,7 @@ main {
   100% { box-shadow: 0 0 0 0   rgba(242, 63, 91, 0); }
 }
 
-/* ───────────────────── stream credentials card ───────────────────── */
+/* ───────────────────── one-click setup card (no creds yet) ───────────────────── */
 .stream-card {
   padding: 2rem;
   background: var(--bg-2);
@@ -375,8 +375,63 @@ main {
 }
 .stream-card.setup p { margin-bottom: 1.5rem; }
 
-.cred-row { margin-top: 1.5rem; }
-.cred-row label {
+/* ───────────────────── OBS setup card (creds present) ───────────────────── */
+.obs-setup {
+  padding: 2rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.obs-setup h2 {
+  margin: 0 0 1.5rem;
+  font-size: 1.3rem;
+  letter-spacing: -0.01em;
+}
+
+.obs-steps {
+  list-style: none;
+  margin: 0 0 2rem;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+.obs-steps li {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  color: var(--fg);
+  font-size: 0.95rem;
+}
+.obs-steps .step-n {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--fg-muted);
+}
+.obs-steps .hl {
+  background: var(--accent);
+  color: white;
+  padding: 0.1em 0.5em;
+  border-radius: 4px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.obs-steps em { font-style: normal; color: var(--fg-muted); }
+
+.obs-fields {
+  display: grid;
+  gap: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.obs-field label {
   display: block;
   font-weight: 600;
   font-size: 0.85rem;
@@ -385,12 +440,20 @@ main {
   color: var(--fg-muted);
   margin-bottom: 0.5rem;
 }
-.cred-value {
+.obs-field label small {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--fg-dim);
+  margin-left: 0.5rem;
+}
+
+.copy-row {
   display: flex;
   gap: 0.5rem;
   align-items: stretch;
 }
-.cred-value input {
+.copy-row input {
   flex: 1;
   background: var(--bg-3);
   border: 1px solid var(--border);
@@ -401,33 +464,42 @@ main {
   font-size: 0.9rem;
   min-width: 0;
 }
-.cred-value .btn {
+.copy-row .btn {
   padding: 0.55rem 0.9rem;
   font-size: 0.85rem;
 }
 
-details.rotate {
-  margin-top: 2rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border);
+.btn-flash {
+  background: rgba(80, 200, 120, 0.15) !important;
+  border-color: rgba(80, 200, 120, 0.5) !important;
+  color: #6ed99b !important;
 }
-details.rotate summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--fg-muted);
-  font-size: 0.9rem;
+
+/* ───────────────────── danger zone (regenerate) ───────────────────── */
+.danger-zone {
+  margin-top: 2.5rem;
+  padding: 1.5rem 2rem;
+  background: var(--bg-2);
+  border: 1px solid rgba(242, 63, 91, 0.25);
+  border-radius: var(--radius);
 }
-details.rotate summary:hover { color: var(--fg); }
-details.rotate p { margin: 1rem 0; }
+.danger-zone h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: #ff8593;
+  letter-spacing: 0.01em;
+}
+.danger-zone p { margin-top: 0.25rem; margin-bottom: 1rem; }
 
 .btn-danger {
   background: transparent;
-  border: 1px solid rgba(242, 63, 91, 0.4);
+  border: 1px solid rgba(242, 63, 91, 0.5);
   color: #ff8593;
+  font-weight: 600;
 }
 .btn-danger:hover:not(:disabled) {
-  background: rgba(242, 63, 91, 0.08);
-  border-color: rgba(242, 63, 91, 0.6);
+  background: rgba(242, 63, 91, 0.1);
+  border-color: rgba(242, 63, 91, 0.7);
 }
 
 /* ───────────────────── mobile ───────────────────── */
