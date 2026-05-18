@@ -31,6 +31,7 @@ services:
       LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
+      WHIP_BASE_URL: "${WHIP_BASE_URL}"
     depends_on:
       postgres:
         condition: service_healthy

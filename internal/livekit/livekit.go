@@ -7,6 +7,7 @@ package livekit
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -16,18 +17,22 @@ import (
 )
 
 type Client struct {
-	publicURL string
-	apiKey    string
-	apiSecret string
-	room      *lksdk.RoomServiceClient
-	ingress   *lksdk.IngressClient
+	publicURL   string
+	whipBaseURL string
+	apiKey      string
+	apiSecret   string
+	room        *lksdk.RoomServiceClient
+	ingress     *lksdk.IngressClient
+	logger      *slog.Logger
 }
 
 type Config struct {
-	URL       string // backend-facing, ws:// or wss://
-	PublicURL string // browser-facing, wss://
-	APIKey    string
-	APISecret string
+	URL         string // backend-facing, ws:// or wss://
+	PublicURL   string // browser-facing, wss://
+	WhipBaseURL string // public WHIP endpoint origin, e.g. https://whip.winton.pro/w
+	APIKey      string
+	APISecret   string
+	Logger      *slog.Logger
 }
 
 // New constructs a LiveKit client. Both Room and Ingress Twirp APIs live
@@ -37,12 +42,18 @@ type Config struct {
 // scenes; the app never talks to the ingress worker directly.
 func New(c Config) *Client {
 	httpURL := wsToHTTP(c.URL)
+	logger := c.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return &Client{
-		publicURL: c.PublicURL,
-		apiKey:    c.APIKey,
-		apiSecret: c.APISecret,
-		room:      lksdk.NewRoomServiceClient(httpURL, c.APIKey, c.APISecret),
-		ingress:   lksdk.NewIngressClient(httpURL, c.APIKey, c.APISecret),
+		publicURL:   c.PublicURL,
+		whipBaseURL: strings.TrimRight(c.WhipBaseURL, "/"),
+		apiKey:      c.APIKey,
+		apiSecret:   c.APISecret,
+		logger:      logger,
+		room:        lksdk.NewRoomServiceClient(httpURL, c.APIKey, c.APISecret),
+		ingress:     lksdk.NewIngressClient(httpURL, c.APIKey, c.APISecret),
 	}
 }
 
@@ -80,6 +91,10 @@ type IngressCredentials struct {
 // CreateWHIPIngress provisions a WHIP-input ingress that pushes into the
 // user's room (room name = slug, identity = slug). Returns OBS-paste-ready
 // credentials.
+//
+// We construct the WHIP URL from our own WhipBaseURL config rather than
+// trusting resp.Url — Ingress only fills resp.Url when its yaml has
+// whip_base_url set, which doesn't reliably env-interpolate.
 func (c *Client) CreateWHIPIngress(ctx context.Context, slug string) (*IngressCredentials, error) {
 	resp, err := c.ingress.CreateIngress(ctx, &livekit.CreateIngressRequest{
 		InputType:           livekit.IngressInput_WHIP_INPUT,
@@ -91,11 +106,33 @@ func (c *Client) CreateWHIPIngress(ctx context.Context, slug string) (*IngressCr
 	if err != nil {
 		return nil, fmt.Errorf("create ingress: %w", err)
 	}
+
+	c.logger.Info("ingress created",
+		"slug", slug,
+		"ingress_id", resp.IngressId,
+		"livekit_returned_url", resp.Url,
+		"livekit_returned_stream_key_present", resp.StreamKey != "")
+
+	whipURL := c.whipURL(resp.StreamKey)
+	if whipURL == "" {
+		whipURL = resp.Url // last-resort fallback
+	}
+
 	return &IngressCredentials{
 		IngressID: resp.IngressId,
 		StreamKey: resp.StreamKey,
-		WhipURL:   resp.Url,
+		WhipURL:   whipURL,
 	}, nil
+}
+
+// whipURL builds the OBS-paste-ready WHIP URL from our configured public
+// base + the per-ingress stream key. LiveKit's WHIP endpoint convention
+// is {base}/{stream_key}, with the same stream_key also used as bearer.
+func (c *Client) whipURL(streamKey string) string {
+	if c.whipBaseURL == "" || streamKey == "" {
+		return ""
+	}
+	return c.whipBaseURL + "/" + streamKey
 }
 
 // DeleteIngress is best-effort — "not found" is swallowed.
