@@ -24,6 +24,12 @@ type Config struct {
 	// Without it, those routes 404 but everything else works.
 	DiscordBotToken string
 
+	// AdminDiscordIDs is a set of Discord user snowflakes who are auto-
+	// promoted to admin on every login. Parsed from ADMIN_DISCORD_IDS
+	// env var (comma-separated). Empty set = no auto-promotion (admins
+	// managed via /admin UI by an existing admin).
+	AdminDiscordIDs map[string]bool
+
 	DatabaseURL string
 
 	// --- LiveKit ---
@@ -53,6 +59,7 @@ func Load() (*Config, error) {
 		DiscordClientSecret: env("DISCORD_CLIENT_SECRET", ""),
 		DiscordGuildID:      env("DISCORD_GUILD_ID", ""),
 		DiscordBotToken:     env("DISCORD_BOT_TOKEN", ""), // optional
+		AdminDiscordIDs:     parseIDSet(env("ADMIN_DISCORD_IDS", "")),
 		DatabaseURL:         env("DATABASE_URL", ""),
 		LiveKitURL:          env("LIVEKIT_URL", ""),
 		LiveKitPublicURL:    env("LIVEKIT_PUBLIC_URL", ""),
@@ -104,4 +111,17 @@ func env(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// parseIDSet parses a comma-separated list of Discord IDs into a lookup
+// set. Empty/whitespace IDs are dropped.
+func parseIDSet(s string) map[string]bool {
+	out := make(map[string]bool)
+	for _, raw := range strings.Split(s, ",") {
+		id := strings.TrimSpace(raw)
+		if id != "" {
+			out[id] = true
+		}
+	}
+	return out
 }

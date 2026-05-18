@@ -47,6 +47,23 @@ func (a *Auth) RequireSession(next http.Handler) http.Handler {
 	})
 }
 
+// RequireAdmin gates routes to is_admin=true. 403 for non-admins,
+// 302 to /login for anonymous.
+func (a *Auth) RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u := Current(r)
+		if u == nil {
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+		if !u.IsAdmin {
+			http.Error(w, "admin only", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // RequireSlug requires both an authed session AND a chosen slug.
 // Sends slug-less users to /onboarding.
 func (a *Auth) RequireSlug(next http.Handler) http.Handler {

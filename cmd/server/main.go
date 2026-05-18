@@ -102,6 +102,7 @@ func main() {
 	r.Get("/multi", hs.Multi)
 	r.Get("/c", hs.CIndex)
 	r.Get("/c/{channelID}", hs.CView)
+	r.Get("/u/{slug}", hs.Profile)
 	r.Get("/api/live-streams", hs.APILiveStreams)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
@@ -125,7 +126,22 @@ func main() {
 		r.Post("/dashboard/rotate-stream", hs.DashboardRotateStream)
 		r.Post("/dashboard/discovery", hs.DashboardSetDiscovery)
 		r.Post("/dashboard/metadata", hs.DashboardSetMetadata)
+		r.Post("/dashboard/profile", hs.DashboardSetProfile)
 		r.Get("/dashboard/live", hs.DashboardLive)
+	})
+
+	// admin (requires is_admin)
+	r.Group(func(r chi.Router) {
+		r.Use(authH.RequireAdmin)
+		r.Get("/admin", hs.AdminIndex)
+		r.Get("/admin/users", hs.AdminUsers)
+		r.Post("/admin/users/{id}/ban", hs.AdminUserBan)
+		r.Post("/admin/users/{id}/unban", hs.AdminUserUnban)
+		r.Post("/admin/users/{id}/promote", hs.AdminUserPromote)
+		r.Post("/admin/users/{id}/demote", hs.AdminUserDemote)
+		r.Get("/admin/streams", hs.AdminStreams)
+		r.Post("/admin/streams/{slug}/kick", hs.AdminStreamKick)
+		r.Get("/admin/audit", hs.AdminAudit)
 	})
 
 	// Channel pages — public, no auth. Must be registered LAST so the
