@@ -10,13 +10,22 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/CreedsCode/winton-tv/internal/auth"
 	"github.com/CreedsCode/winton-tv/internal/config"
 	"github.com/CreedsCode/winton-tv/internal/handlers"
+	"github.com/CreedsCode/winton-tv/internal/session"
+	"github.com/CreedsCode/winton-tv/internal/store"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	// .env is optional — env vars from the OS/compose take precedence.
+	_ = godotenv.Load()
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
@@ -26,9 +35,26 @@ func main() {
 		os.Exit(1)
 	}
 
-	h, err := handlers.New(cfg, logger)
+	startCtx, startCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer startCancel()
+
+	st, err := store.New(startCtx, cfg.DatabaseURL)
 	if err != nil {
-		logger.Error("handler init failed", "err", err)
+		logger.Error("store init failed", "err", err)
+		os.Exit(1)
+	}
+	defer st.Close()
+
+	// scs needs a *sql.DB — wrap the pgxpool with the stdlib adapter.
+	sqlDB := stdlib.OpenDBFromPool(st.Pool())
+	defer sqlDB.Close()
+
+	sessMgr := session.New(sqlDB, cfg.BaseURL)
+	authH := auth.New(cfg, st, sessMgr, logger)
+
+	hs, err := handlers.New(cfg, st, logger)
+	if err != nil {
+		logger.Error("handlers init failed", "err", err)
 		os.Exit(1)
 	}
 
@@ -38,11 +64,32 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Timeout(30 * time.Second))
+	r.Use(sessMgr.LoadAndSave)
+	r.Use(authH.LoadUser)
 
-	r.Get("/", h.Index)
-	r.Get("/login", h.Login)
-	r.Get("/healthz", h.Healthz)
+	// public
+	r.Get("/", hs.Index)
+	r.Get("/login", hs.Login)
+	r.Get("/healthz", hs.Healthz)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
+
+	// auth
+	r.Get("/auth/discord", authH.Start)
+	r.Get("/auth/discord/callback", authH.Callback)
+	r.Post("/logout", authH.Logout)
+
+	// authed, no slug required (onboarding itself)
+	r.Group(func(r chi.Router) {
+		r.Use(authH.RequireSession)
+		r.Get("/onboarding", hs.OnboardingGet)
+		r.Post("/onboarding", hs.OnboardingPost)
+	})
+
+	// authed + slug claimed
+	r.Group(func(r chi.Router) {
+		r.Use(authH.RequireSlug)
+		r.Get("/dashboard", hs.Dashboard)
+	})
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -52,7 +99,7 @@ func main() {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("server listening", "addr", srv.Addr, "env", cfg.Env)
+		logger.Info("server listening", "addr", srv.Addr, "base_url", cfg.BaseURL)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
@@ -70,9 +117,9 @@ func main() {
 		logger.Info("shutdown signal received", "signal", sig.String())
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "err", err)
 		os.Exit(1)
 	}

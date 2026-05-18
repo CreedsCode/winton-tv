@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pick your channel &mdash; winton-tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>winton-tv</span>
+    </a>
+    <nav class="site-nav">
+      <form method="POST" action="/logout" class="inline-form">
+        <button class="link-button" type="submit">Sign out</button>
+      </form>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero hero-narrow">
+      <h1>Pick your channel</h1>
+      <p class="lede">
+        Welcome <strong>{{.User.GlobalName}}</strong>. Your channel will live at
+        <code>winton.tv/&lt;your-slug&gt;</code>. Choose carefully &mdash; V1 doesn't
+        support changing it later.
+      </p>
+
+      {{if .Error}}
+      <div class="form-error" role="alert">{{.Error}}</div>
+      {{end}}
+
+      <form method="POST" action="/onboarding" class="slug-form" novalidate>
+        <label for="slug">Channel slug</label>
+        <div class="slug-input-wrap">
+          <span class="slug-prefix">winton.tv/</span>
+          <input
+            type="text"
+            id="slug"
+            name="slug"
+            value="{{.Attempted}}"
+            placeholder="yourname"
+            required
+            minlength="3"
+            maxlength="32"
+            pattern="[a-z0-9_-]+"
+            autocomplete="off"
+            autofocus>
+        </div>
+        <p class="slug-help">3&ndash;32 chars &middot; lowercase letters, numbers, <code>_</code> and <code>-</code></p>
+        <button class="btn btn-primary" type="submit">Claim it</button>
+      </form>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
+  </footer>
+</body>
+</html>
