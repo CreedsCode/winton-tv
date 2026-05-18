@@ -24,13 +24,17 @@ type Client struct {
 }
 
 type Config struct {
-	URL        string // backend-facing, ws:// or wss://
-	PublicURL  string // browser-facing, wss://
-	APIKey     string
-	APISecret  string
-	IngressURL string // backend Twirp API, http://ingress:9090
+	URL       string // backend-facing, ws:// or wss://
+	PublicURL string // browser-facing, wss://
+	APIKey    string
+	APISecret string
 }
 
+// New constructs a LiveKit client. Both Room and Ingress Twirp APIs live
+// on the LiveKit *server* (port 7880). The ingress *worker* container
+// only handles WHIP/RTMP traffic — it doesn't expose a management API.
+// Job dispatch from server -> worker happens through Redis behind the
+// scenes; the app never talks to the ingress worker directly.
 func New(c Config) *Client {
 	httpURL := wsToHTTP(c.URL)
 	return &Client{
@@ -38,7 +42,7 @@ func New(c Config) *Client {
 		apiKey:    c.APIKey,
 		apiSecret: c.APISecret,
 		room:      lksdk.NewRoomServiceClient(httpURL, c.APIKey, c.APISecret),
-		ingress:   lksdk.NewIngressClient(c.IngressURL, c.APIKey, c.APISecret),
+		ingress:   lksdk.NewIngressClient(httpURL, c.APIKey, c.APISecret),
 	}
 }
 

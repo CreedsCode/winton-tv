@@ -53,11 +53,10 @@ func main() {
 	authH := auth.New(cfg, st, sessMgr, logger)
 
 	lk := livekit.New(livekit.Config{
-		URL:        cfg.LiveKitURL,
-		PublicURL:  cfg.LiveKitPublicURL,
-		APIKey:     cfg.LiveKitAPIKey,
-		APISecret:  cfg.LiveKitAPISecret,
-		IngressURL: cfg.LiveKitIngressURL,
+		URL:       cfg.LiveKitURL,
+		PublicURL: cfg.LiveKitPublicURL,
+		APIKey:    cfg.LiveKitAPIKey,
+		APISecret: cfg.LiveKitAPISecret,
 	})
 
 	hs, err := handlers.New(cfg, st, lk, logger)

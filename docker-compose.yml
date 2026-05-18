@@ -30,7 +30,6 @@ services:
       LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY}"
       LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET}"
-      LIVEKIT_INGRESS_URL: "${LIVEKIT_INGRESS_URL:-http://ingress:9090}"
     depends_on:
       postgres:
         condition: service_healthy
