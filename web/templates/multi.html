@@ -51,10 +51,77 @@
       {{end}}
     </div>
     {{else}}
-    <div class="empty-state">
-      <p class="empty-heading">No channels in this multi-view.</p>
-      <p class="empty-sub">Pass <code>?s=alice,bob,charlie</code> in the URL.</p>
-    </div>
+    <section class="hero hero-narrow">
+      <h1>Build a multi-view</h1>
+      <p class="lede">
+        Pick channels to watch side-by-side. Up to 9 at once.
+      </p>
+
+      <div id="multi-builder" class="multi-builder">
+        <p class="muted">Loading live channels&hellip;</p>
+      </div>
+
+      <div class="multi-builder-actions" hidden id="multi-actions">
+        <button id="multi-go" class="btn btn-primary" type="button" disabled>
+          Open multi-view (<span id="multi-count">0</span>)
+        </button>
+        <button id="multi-go-all" class="btn btn-secondary" type="button">
+          Watch all live
+        </button>
+      </div>
+
+      <p class="back-link" style="margin-top: 2rem;">
+        Or share a URL directly: <code>/multi?s=alice,bob,charlie</code>
+      </p>
+    </section>
+
+    <script>
+      (function () {
+        const builder = document.getElementById('multi-builder');
+        const actions = document.getElementById('multi-actions');
+        const goBtn   = document.getElementById('multi-go');
+        const allBtn  = document.getElementById('multi-go-all');
+        const counter = document.getElementById('multi-count');
+
+        fetch('/api/live-streams', { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            const slugs = (data && data.slugs) || [];
+            if (slugs.length === 0) {
+              builder.innerHTML =
+                '<p class="muted">No channels are live right now. Come back when someone’s streaming.</p>';
+              return;
+            }
+            builder.innerHTML = slugs.map(function (s) {
+              return '<label class="multi-check">' +
+                       '<input type="checkbox" value="' + s + '">' +
+                       '<span><span class="live-dot"></span>/' + s + '</span>' +
+                     '</label>';
+            }).join('');
+            actions.hidden = false;
+
+            function update() {
+              const picked = Array.from(
+                builder.querySelectorAll('input:checked')
+              ).map(function (el) { return el.value; });
+              counter.textContent = picked.length;
+              goBtn.disabled = picked.length === 0;
+              goBtn.dataset.url = '/multi?s=' + picked.join(',');
+            }
+            builder.addEventListener('change', update);
+
+            goBtn.addEventListener('click', function () {
+              if (goBtn.dataset.url) location.href = goBtn.dataset.url;
+            });
+            allBtn.addEventListener('click', function () {
+              location.href = '/multi?s=' + slugs.slice(0, 9).join(',');
+            });
+          })
+          .catch(function () {
+            builder.innerHTML = '<p class="muted">Couldn’t load live channels.</p>';
+          });
+      })();
+    </script>
     {{end}}
   </main>
 

@@ -1116,6 +1116,49 @@ main {
 }
 .multi-header .muted { margin-top: 0.25rem; }
 
+/* ───────────────────── multi-view builder ───────────────────── */
+.multi-builder {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 4rem;
+}
+.multi-check {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+.multi-check:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(88, 101, 242, 0.08);
+}
+.multi-check input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.multi-check .live-dot {
+  display: inline-block;
+  margin-right: 0.35rem;
+}
+
+.multi-builder-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
 /* ───────────────────── voice channel cards (/c) ───────────────────── */
 .vc-grid {
   display: grid;
