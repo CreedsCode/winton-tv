@@ -3,15 +3,77 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>winton-tv</title>
-  <meta name="description" content="Discord-gated multistream platform for the Winton community.">
+  <title>winton-tv &mdash; community streaming</title>
+  <meta name="description" content="Discord-gated, low-latency multistream platform for the Winton community.">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 </head>
 <body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>winton-tv</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/login">Sign in</a>
+    </nav>
+  </header>
+
   <main>
-    <h1>winton-tv</h1>
-    <p class="lede">Discord-gated, low-latency multistream platform for the Winton community.</p>
-    <p class="status">v0 scaffold &middot; <a href="https://github.com/CreedsCode/winton-tv">source on GitHub</a></p>
+    <section class="hero">
+      <h1>Community streaming for Winton.</h1>
+      <p class="lede">
+        Low-latency WebRTC video. Discord-gated. No accounts to manage, no
+        ads, no algorithm &mdash; just members streaming for members.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#live">Watch live</a>
+        <a class="btn btn-secondary" href="/login">Start streaming</a>
+      </div>
+    </section>
+
+    <section id="live" class="section">
+      <h2 class="section-title">Live right now</h2>
+      <div class="empty-state">
+        <p class="empty-heading">Nothing live yet.</p>
+        <p class="empty-sub">Be the first &mdash; <a href="/login">sign in with Discord</a> and get a stream key.</p>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">How it works</h2>
+      <ol class="steps">
+        <li>
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <h3>Join the Winton Discord</h3>
+            <p>Streaming and chat are gated to verified guild members. Anyone can watch.</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <h3>Sign in &amp; pick your channel</h3>
+            <p>Login with Discord, choose your channel name (e.g. <code>winton.tv/yourname</code>), grab your stream key.</p>
+          </div>
+        </li>
+        <li>
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <h3>Stream from OBS</h3>
+            <p>Paste the WHIP URL into OBS. Hit Start Streaming. Sub-500ms latency to viewers.</p>
+          </div>
+        </li>
+      </ol>
+    </section>
   </main>
+
+  <footer class="site-footer">
+    <p>
+      Open source &middot;
+      <a href="https://github.com/CreedsCode/winton-tv">GitHub</a> &middot;
+      Built for the Winton community
+    </p>
+  </footer>
 </body>
 </html>
