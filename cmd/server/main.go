@@ -40,6 +40,7 @@ func main() {
 	r.Use(middleware.Timeout(30 * time.Second))
 
 	r.Get("/", h.Index)
+	r.Get("/login", h.Login)
 	r.Get("/healthz", h.Healthz)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
