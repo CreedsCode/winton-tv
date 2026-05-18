@@ -73,6 +73,37 @@
       {{end}}
     </section>
 
+    {{if .DiscordOn}}
+    <section class="section">
+      <h2 class="section-title">
+        Active in Discord
+        {{if .VoiceChannels}}<span class="section-count">{{len .VoiceChannels}}</span>{{end}}
+        <a class="section-link" href="/c">all voice channels &rarr;</a>
+      </h2>
+      {{if .VoiceChannels}}
+      <div class="vc-grid">
+        {{range .VoiceChannels}}
+        <a class="vc-card{{if gt .LiveCount 0}} has-live{{end}}" href="/c/{{.ID}}">
+          <div class="vc-head">
+            <span class="vc-name">🔊 {{.Name}}</span>
+            <span class="vc-count">{{.Total}} in voice</span>
+          </div>
+          {{if gt .LiveCount 0}}
+          <div class="vc-live">
+            <span class="live-pill"><span class="live-dot"></span>{{.LiveCount}} streaming</span>
+          </div>
+          {{end}}
+        </a>
+        {{end}}
+      </div>
+      {{else}}
+      <div class="empty-state">
+        <p class="empty-heading">Nobody's in voice right now.</p>
+      </div>
+      {{end}}
+    </section>
+    {{end}}
+
     <section class="section">
       <h2 class="section-title">How it works</h2>
       <ol class="steps">

@@ -28,6 +28,13 @@
   </header>
 
   <main class="multi-main">
+    {{if .Header}}
+    <header class="multi-header">
+      <h1>{{.Header}}</h1>
+      {{if .Subtitle}}<p class="muted">{{.Subtitle}}</p>{{end}}
+    </header>
+    {{end}}
+
     {{if .Cells}}
     <div class="multi-grid" data-count="{{len .Cells}}">
       {{range .Cells}}

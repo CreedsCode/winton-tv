@@ -15,6 +15,7 @@ import (
 
 	"github.com/CreedsCode/winton-tv/internal/auth"
 	"github.com/CreedsCode/winton-tv/internal/config"
+	discordbot "github.com/CreedsCode/winton-tv/internal/discord"
 	"github.com/CreedsCode/winton-tv/internal/livekit"
 	"github.com/CreedsCode/winton-tv/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -35,16 +36,17 @@ type Handler struct {
 	cfg     *config.Config
 	store   *store.Store
 	livekit *livekit.Client
+	discord *discordbot.Bot // optional — nil if DISCORD_BOT_TOKEN unset
 	logger  *slog.Logger
 	tmpl    *template.Template
 }
 
-func New(cfg *config.Config, st *store.Store, lk *livekit.Client, logger *slog.Logger) (*Handler, error) {
+func New(cfg *config.Config, st *store.Store, lk *livekit.Client, bot *discordbot.Bot, logger *slog.Logger) (*Handler, error) {
 	tmpl, err := template.ParseGlob("web/templates/*.html")
 	if err != nil {
 		return nil, fmt.Errorf("parse templates: %w", err)
 	}
-	return &Handler{cfg: cfg, store: st, livekit: lk, logger: logger, tmpl: tmpl}, nil
+	return &Handler{cfg: cfg, store: st, livekit: lk, discord: bot, logger: logger, tmpl: tmpl}, nil
 }
 
 // ─────────────────────── public pages ───────────────────────
@@ -61,9 +63,36 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Warn("index live cards", "err", err)
 	}
+
+	// Active voice channels (bot is optional — only render section if present)
+	var vcCards []VoiceChannelCard
+	if h.discord != nil {
+		channels := h.discord.ActiveVoiceChannels()
+		liveSet := make(map[string]bool, len(cards))
+		for _, c := range cards {
+			liveSet[c.Slug] = true
+		}
+		for _, ch := range channels {
+			card := VoiceChannelCard{ID: ch.ID, Name: ch.Name, Total: len(ch.Members)}
+			for _, did := range ch.Members {
+				u, err := h.store.GetUserByDiscordID(r.Context(), did)
+				if err != nil || u == nil || u.Slug == nil {
+					continue
+				}
+				card.Streamers = append(card.Streamers, *u.Slug)
+				if liveSet[*u.Slug] {
+					card.LiveCount++
+				}
+			}
+			vcCards = append(vcCards, card)
+		}
+	}
+
 	h.render(w, "index.html", map[string]any{
-		"User":  auth.Current(r),
-		"Cards": cards,
+		"User":          auth.Current(r),
+		"Cards":         cards,
+		"VoiceChannels": vcCards,
+		"DiscordOn":     h.discord != nil,
 	})
 }
 
@@ -449,6 +478,138 @@ func (h *Handler) Multi(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ─────────────────────── /c — voice-channel multi-view ───────────────────────
+
+// VoiceChannelCard is the shape rendered on /c index page.
+type VoiceChannelCard struct {
+	ID         string
+	Name       string
+	Total      int      // raw Discord member count in this voice channel
+	Streamers  []string // slugs of those who're winton-tv users
+	LiveCount  int      // streamers in this channel currently live
+}
+
+// CIndex lists active Discord voice channels (channels with at least one
+// person in them). For each, shows total member count + how many are
+// streaming on winton-tv right now.
+func (h *Handler) CIndex(w http.ResponseWriter, r *http.Request) {
+	if h.discord == nil {
+		http.Error(w, "voice channel features disabled (DISCORD_BOT_TOKEN unset)", http.StatusNotImplemented)
+		return
+	}
+
+	channels := h.discord.ActiveVoiceChannels()
+
+	// Live set for quick lookup
+	streams, _ := h.livekit.ListLive(r.Context())
+	liveSet := make(map[string]bool, len(streams))
+	for _, s := range streams {
+		liveSet[s.Slug] = true
+	}
+
+	cards := make([]VoiceChannelCard, 0, len(channels))
+	for _, ch := range channels {
+		card := VoiceChannelCard{ID: ch.ID, Name: ch.Name, Total: len(ch.Members)}
+		for _, did := range ch.Members {
+			u, err := h.store.GetUserByDiscordID(r.Context(), did)
+			if err != nil || u == nil || u.Slug == nil {
+				continue
+			}
+			card.Streamers = append(card.Streamers, *u.Slug)
+			if liveSet[*u.Slug] {
+				card.LiveCount++
+			}
+		}
+		cards = append(cards, card)
+	}
+
+	h.render(w, "c_index.html", map[string]any{
+		"User":     auth.Current(r),
+		"Channels": cards,
+	})
+}
+
+// CView renders a multi-view grid for the streamers currently in a voice
+// channel who are also live on winton-tv. Anonymous viewers allowed.
+func (h *Handler) CView(w http.ResponseWriter, r *http.Request) {
+	if h.discord == nil {
+		http.Error(w, "voice channel features disabled (DISCORD_BOT_TOKEN unset)", http.StatusNotImplemented)
+		return
+	}
+	channelID := chi.URLParam(r, "channelID")
+	if channelID == "" {
+		http.Redirect(w, r, "/c", http.StatusFound)
+		return
+	}
+
+	name, ok := h.discord.ChannelName(channelID)
+	if !ok {
+		w.WriteHeader(http.StatusNotFound)
+		h.render(w, "channel_404.html", map[string]any{"Slug": "c/" + channelID})
+		return
+	}
+
+	memberIDs := h.discord.UsersInChannel(channelID)
+
+	// Live set
+	streams, _ := h.livekit.ListLive(r.Context())
+	liveSet := make(map[string]bool, len(streams))
+	for _, s := range streams {
+		liveSet[s.Slug] = true
+	}
+
+	viewer := auth.Current(r)
+	type cell struct {
+		Slug         string
+		DisplayName  string
+		LiveKitToken string
+		Title        string
+	}
+	cells := make([]cell, 0, len(memberIDs))
+
+	for _, did := range memberIDs {
+		u, err := h.store.GetUserByDiscordID(r.Context(), did)
+		if err != nil || u == nil || u.Slug == nil {
+			continue
+		}
+		if !liveSet[*u.Slug] {
+			continue // only show currently-streaming members in the grid
+		}
+		identity, err := guestIdentity()
+		if err != nil {
+			continue
+		}
+		opts := livekit.ViewerOptions{
+			Identity:    identity,
+			Room:        *u.Slug,
+			TTL:         6 * time.Hour,
+			DisplayName: "Guest",
+			CanChat:     false,
+		}
+		if viewer != nil {
+			opts.DisplayName = viewer.GlobalName
+		}
+		token, err := h.livekit.ViewerToken(opts)
+		if err != nil {
+			continue
+		}
+		cells = append(cells, cell{
+			Slug:         *u.Slug,
+			DisplayName:  u.GlobalName,
+			LiveKitToken: token,
+			Title:        u.Title,
+		})
+	}
+
+	h.render(w, "multi.html", map[string]any{
+		"Cells":            cells,
+		"Viewer":           viewer,
+		"LiveKitPublicURL": h.livekit.PublicURL(),
+		"Header":           "#" + name,
+		"Subtitle":         fmt.Sprintf("%d in voice · %d streaming", len(memberIDs), len(cells)),
+	})
+}
+
 // DashboardLive returns just the live badge — polled by HTMX every 10s.
 func (h *Handler) DashboardLive(w http.ResponseWriter, r *http.Request) {
 	u := auth.Current(r)
@@ -555,9 +716,9 @@ func mustReservedSet() map[string]bool {
 	// Reserved at the routing layer (existing routes) and for future expansion.
 	// Keep this list in sync with new top-level routes.
 	list := []string{
-		"about", "admin", "api", "auth", "callback", "channel", "channels",
+		"about", "admin", "api", "auth", "c", "callback", "channel", "channels",
 		"chat", "dashboard", "discord", "docs", "healthz", "help", "login",
-		"logout", "onboarding", "privacy", "search", "settings", "static",
+		"logout", "multi", "onboarding", "privacy", "search", "settings", "static",
 		"stream", "streams", "support", "tos", "watch",
 	}
 	out := make(map[string]bool, len(list))

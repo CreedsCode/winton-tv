@@ -19,6 +19,10 @@ type Config struct {
 	DiscordClientID     string
 	DiscordClientSecret string
 	DiscordGuildID      string
+	// DiscordBotToken is optional. If set, the app connects a Gateway
+	// session to track voice channel membership for /c/<channel> features.
+	// Without it, those routes 404 but everything else works.
+	DiscordBotToken string
 
 	DatabaseURL string
 
@@ -48,6 +52,7 @@ func Load() (*Config, error) {
 		DiscordClientID:     env("DISCORD_CLIENT_ID", ""),
 		DiscordClientSecret: env("DISCORD_CLIENT_SECRET", ""),
 		DiscordGuildID:      env("DISCORD_GUILD_ID", ""),
+		DiscordBotToken:     env("DISCORD_BOT_TOKEN", ""), // optional
 		DatabaseURL:         env("DATABASE_URL", ""),
 		LiveKitURL:          env("LIVEKIT_URL", ""),
 		LiveKitPublicURL:    env("LIVEKIT_PUBLIC_URL", ""),
