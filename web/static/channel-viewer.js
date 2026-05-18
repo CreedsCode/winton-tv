@@ -195,7 +195,7 @@
           srcObjectSet: !!videoEl.srcObject,
           videoWidth: videoEl.videoWidth,
           videoHeight: videoEl.videoHeight,
-          readyState: videoEl.readyState,  // 0=nothing, 4=enough data
+          readyState: videoEl.readyState,  // 0 = nothing, 4 = enough data
           paused: videoEl.paused,
           muted: videoEl.muted,
         });
