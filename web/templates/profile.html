@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Profile.GlobalName}} &mdash; Winton Tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>Winton Tv</span>
+    </a>
+    <nav class="site-nav">
+      {{if .Viewer}}
+        <a href="/dashboard">Dashboard</a>
+        {{if .Viewer.IsAdmin}}<a href="/admin">Admin</a>{{end}}
+        <form method="POST" action="/logout" class="inline-form">
+          <button class="link-button" type="submit">Sign out</button>
+        </form>
+      {{else}}
+        <a href="/login">Sign in</a>
+      {{end}}
+    </nav>
+  </header>
+
+  <main class="profile-main">
+    <section class="profile-card">
+      <div class="profile-head">
+        {{if .AvatarURL}}
+          <img class="profile-avatar" src="{{.AvatarURL}}" alt="">
+        {{else}}
+          <div class="profile-avatar profile-avatar-fallback">{{slice .Profile.GlobalName 0 1}}</div>
+        {{end}}
+        <div class="profile-meta">
+          <h1>{{.Profile.GlobalName}}</h1>
+          <p class="muted">winton.tv/<code>{{.Profile.Slug}}</code></p>
+          <div class="profile-badges">
+            {{if .Live}}
+              <span class="live-badge is-live"><span class="live-dot"></span>LIVE NOW</span>
+            {{end}}
+            {{if .Profile.IsAdmin}}
+              <span class="badge badge-admin">⚙️ Admin</span>
+            {{end}}
+            {{if .Profile.Banned}}
+              <span class="badge badge-banned">🚫 Banned</span>
+            {{end}}
+          </div>
+        </div>
+        <div class="profile-actions">
+          <a class="btn {{if .Live}}btn-primary{{else}}btn-secondary{{end}}" href="/{{.Profile.Slug}}">
+            {{if .Live}}Watch live &rarr;{{else}}Open channel{{end}}
+          </a>
+        </div>
+      </div>
+
+      {{if .Profile.Bio}}
+      <div class="profile-bio">{{.Profile.Bio}}</div>
+      {{end}}
+
+      {{if .SocialLinks}}
+      <div class="profile-links">
+        {{range .SocialLinks}}
+        <a class="profile-link" href="{{.URL}}" target="_blank" rel="noopener nofollow">
+          {{.Label}} &rarr;
+        </a>
+        {{end}}
+      </div>
+      {{end}}
+
+      {{if .Profile.Title}}
+      <div class="profile-stream-meta">
+        <h3>About the stream</h3>
+        <p class="profile-title">{{.Profile.Title}}</p>
+        {{if .Profile.Description}}
+        <div class="channel-description">{{.Profile.Description}}</div>
+        {{end}}
+      </div>
+      {{end}}
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
+  </footer>
+</body>
+</html>

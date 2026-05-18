@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin &middot; Live now &mdash; Winton Tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>Winton Tv</span>
+    </a>
+    <nav class="site-nav">
+      <a href="/dashboard">Dashboard</a>
+      <form method="POST" action="/logout" class="inline-form">
+        <button class="link-button" type="submit">Sign out</button>
+      </form>
+    </nav>
+  </header>
+
+  <main class="admin-main">
+    <nav class="admin-nav">
+      <a class="{{if eq .Active "users"}}is-active{{end}}" href="/admin/users">👥 Users</a>
+      <a class="{{if eq .Active "streams"}}is-active{{end}}" href="/admin/streams">📺 Live now</a>
+      <a class="{{if eq .Active "audit"}}is-active{{end}}" href="/admin/audit">📋 Audit log</a>
+    </nav>
+
+    <section class="admin-section">
+      <h1>Live streams ({{len .Streams}})</h1>
+      <p class="muted">Kicking ends the stream for everyone immediately. The streamer's WHIP keys still work; they can restart.</p>
+
+      <table class="admin-table">
+        <thead>
+          <tr>
+            <th>Channel</th>
+            <th>Slug</th>
+            <th>Viewers</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range .Streams}}
+          <tr>
+            <td><strong>{{.DisplayName}}</strong></td>
+            <td><a href="/u/{{.Slug}}"><code>/{{.Slug}}</code></a></td>
+            <td>{{.ViewerCount}}</td>
+            <td class="actions-cell">
+              <a class="btn btn-secondary" href="/{{.Slug}}" target="_blank">Open</a>
+              <form method="POST" action="/admin/streams/{{.Slug}}/kick" class="inline-form"
+                    onsubmit="this.querySelector('[name=reason]').value = prompt('Reason for kicking this stream?', '') || ''; return this.querySelector('[name=reason]').value !== '';">
+                <input type="hidden" name="reason">
+                <button class="btn btn-danger" type="submit">Kick</button>
+              </form>
+            </td>
+          </tr>
+          {{else}}
+          <tr><td colspan="4" class="muted" style="text-align:center;padding:2rem">No live streams right now.</td></tr>
+          {{end}}
+        </tbody>
+      </table>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
+  </footer>
+</body>
+</html>
