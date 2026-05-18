@@ -27,30 +27,59 @@
     </nav>
   </header>
 
-  <main class="channel-main">
-    <div class="player-wrap">
-      <video id="lk-video" class="player-video" autoplay playsinline muted controls controlslist="nodownload"></video>
-      <div id="player-overlay" class="player-overlay {{if .Live}}is-connecting{{else}}is-offline{{end}}">
-        <div class="overlay-content">
-          {{if .Live}}
-            <div class="spinner"></div>
-            <div class="overlay-label">Connecting&hellip;</div>
-          {{else}}
-            <div class="overlay-label">Offline</div>
-            <div class="overlay-sub">{{.Channel.GlobalName}} isn't streaming right now.</div>
-          {{end}}
+  <main class="watch-main">
+    <div class="watch-layout">
+      <div class="watch-player">
+        <div class="player-wrap">
+          <video id="lk-video" class="player-video" autoplay playsinline muted controls controlslist="nodownload"></video>
+          <div id="player-overlay" class="player-overlay {{if .Live}}is-connecting{{else}}is-offline{{end}}">
+            <div class="overlay-content">
+              {{if .Live}}
+                <div class="spinner"></div>
+                <div class="overlay-label">Connecting&hellip;</div>
+              {{else}}
+                <div class="overlay-label">Offline</div>
+                <div class="overlay-sub">{{.Channel.GlobalName}} isn't streaming right now.</div>
+              {{end}}
+            </div>
+          </div>
+          <button id="unmute-hint" class="unmute-hint" hidden>🔇 Click to unmute</button>
         </div>
-      </div>
-      <button id="unmute-hint" class="unmute-hint" hidden>🔇 Click to unmute</button>
-    </div>
 
-    <section class="channel-info">
-      <div class="channel-head">
-        <h1>{{.Channel.GlobalName}}</h1>
-        {{template "_live_badge.html" .}}
+        <section class="channel-info">
+          <div class="channel-head">
+            <h1>{{.Channel.GlobalName}}</h1>
+            {{template "_live_badge.html" .}}
+          </div>
+          <p class="muted">winton.tv/<code>{{.Channel.Slug}}</code></p>
+        </section>
       </div>
-      <p class="muted">winton.tv/<code>{{.Channel.Slug}}</code></p>
-    </section>
+
+      <aside class="chat-side">
+        <div class="chat-head">
+          <h3>Chat</h3>
+        </div>
+        <div id="chat-messages" class="chat-messages" aria-live="polite">
+          <div class="chat-system">Welcome to <strong>{{.Channel.Slug}}</strong>'s chat.</div>
+        </div>
+        {{if .CanChat}}
+        <form id="chat-form" class="chat-form">
+          <input id="chat-input"
+                 type="text"
+                 placeholder="Say something…"
+                 maxlength="500"
+                 autocomplete="off"
+                 required>
+          <button type="submit" class="btn btn-primary">Send</button>
+        </form>
+        {{else}}
+        <div class="chat-login">
+          <p class="muted">Sign in with Discord to chat. Anyone can read.</p>
+          <a class="btn btn-primary" href="/auth/discord">Sign in</a>
+        </div>
+        {{end}}
+      </aside>
+    </div>
   </main>
 
   <footer class="site-footer">
@@ -58,7 +87,7 @@
   </footer>
 
   <script id="lk-config" type="application/json">
-    {"url": "{{.LiveKitPublicURL}}", "token": "{{.LiveKitToken}}", "room": "{{.Channel.Slug}}"}
+    {"url": "{{.LiveKitPublicURL}}", "token": "{{.LiveKitToken}}", "room": "{{.Channel.Slug}}", "canChat": {{.CanChat}}}
   </script>
 </body>
 </html>

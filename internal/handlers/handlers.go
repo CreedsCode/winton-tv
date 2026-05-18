@@ -4,6 +4,7 @@ package handlers
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"log/slog"
@@ -18,6 +19,15 @@ import (
 	"github.com/CreedsCode/winton-tv/internal/store"
 	"github.com/go-chi/chi/v5"
 )
+
+// chatMetadata is what gets stamped into a viewer's LiveKit participant
+// metadata. Other clients deserialise this when rendering chat lines so
+// the sender's avatar + Discord identity are server-attested (came from
+// our JWT signing, not from the chat payload itself).
+type chatMetadata struct {
+	AvatarURL string `json:"avatar_url,omitempty"`
+	DiscordID string `json:"discord_id,omitempty"`
+}
 
 type Handler struct {
 	cfg     *config.Config
@@ -132,7 +142,27 @@ func (h *Handler) Channel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.livekit.ViewerToken(viewerIdentity, *user.Slug, 6*time.Hour)
+	viewer := auth.Current(r)
+	opts := livekit.ViewerOptions{
+		Identity:    viewerIdentity,
+		Room:        *user.Slug,
+		TTL:         6 * time.Hour,
+		DisplayName: "Guest",
+		CanChat:     false,
+	}
+	if viewer != nil {
+		opts.DisplayName = viewer.GlobalName
+		opts.CanChat = true
+		meta := chatMetadata{
+			AvatarURL: discordAvatarURL(viewer),
+			DiscordID: viewer.DiscordID,
+		}
+		if b, err := json.Marshal(meta); err == nil {
+			opts.Metadata = string(b)
+		}
+	}
+
+	token, err := h.livekit.ViewerToken(opts)
 	if err != nil {
 		h.logger.Error("viewer token", "slug", slug, "err", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
@@ -146,11 +176,22 @@ func (h *Handler) Channel(w http.ResponseWriter, r *http.Request) {
 
 	h.render(w, "channel.html", map[string]any{
 		"Channel":          user,
-		"Viewer":           auth.Current(r), // may be nil (anonymous)
+		"Viewer":           viewer, // may be nil (anonymous)
 		"LiveKitToken":     token,
 		"LiveKitPublicURL": h.livekit.PublicURL(),
 		"Live":             live,
+		"CanChat":          viewer != nil,
 	})
+}
+
+// discordAvatarURL returns the user's Discord CDN avatar URL or "" if
+// they don't have a custom avatar set. Discord IDs and avatar hashes
+// are public so no leak concern.
+func discordAvatarURL(u *store.User) string {
+	if u == nil || u.AvatarHash == nil || *u.AvatarHash == "" {
+		return ""
+	}
+	return "https://cdn.discordapp.com/avatars/" + u.DiscordID + "/" + *u.AvatarHash + ".png?size=64"
 }
 
 func guestIdentity() (string, error) {
