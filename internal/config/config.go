@@ -32,6 +32,13 @@ type Config struct {
 	LiveKitPublicURL string
 	LiveKitAPIKey    string
 	LiveKitAPISecret string
+
+	// WhipBaseURL is the *public* origin OBS posts WHIP requests to.
+	// We construct the full per-user URL as <WhipBaseURL>/<stream_key>
+	// instead of trusting LiveKit Ingress's resp.Url field — Ingress
+	// only fills that in when its own yaml has whip_base_url set, which
+	// doesn't reliably env-interpolate in all deploy setups.
+	WhipBaseURL string
 }
 
 func Load() (*Config, error) {
@@ -46,6 +53,7 @@ func Load() (*Config, error) {
 		LiveKitPublicURL:    env("LIVEKIT_PUBLIC_URL", ""),
 		LiveKitAPIKey:       env("LIVEKIT_API_KEY", ""),
 		LiveKitAPISecret:    env("LIVEKIT_API_SECRET", ""),
+		WhipBaseURL:         env("WHIP_BASE_URL", ""),
 	}
 
 	required := map[string]string{
@@ -58,6 +66,7 @@ func Load() (*Config, error) {
 		"LIVEKIT_PUBLIC_URL":    cfg.LiveKitPublicURL,
 		"LIVEKIT_API_KEY":       cfg.LiveKitAPIKey,
 		"LIVEKIT_API_SECRET":    cfg.LiveKitAPISecret,
+		"WHIP_BASE_URL":         cfg.WhipBaseURL,
 	}
 	var missing []string
 	for k, v := range required {
