@@ -1,11 +1,10 @@
-// Channel viewer: connect to LiveKit room, attach the first video track
-// to the <video> element, surface a click-to-unmute hint (browsers block
-// autoplay-with-sound). Read config from a <script id="lk-config">
-// JSON blob written by the template so we don't have to escape into JS.
+// Channel viewer: LiveKit room (subscribe video/audio) + chat via
+// DataChannel. Anonymous viewers receive chat but token's
+// CanPublishData=false stops them from sending. Server enforces.
 
 (function () {
   const TAG = '[viewer]';
-  function log(/* ...args */) {
+  function log() {
     const args = Array.prototype.slice.call(arguments);
     args.unshift(TAG);
     console.log.apply(console, args);
@@ -23,7 +22,7 @@
     let cfg;
     try { cfg = JSON.parse(cfgEl.textContent); }
     catch (e) { console.error(TAG, 'lk-config parse failed', e); return; }
-    log('config', { url: cfg.url, room: cfg.room, tokenPresent: !!cfg.token });
+    log('config', { url: cfg.url, room: cfg.room, canChat: cfg.canChat });
 
     if (!window.LivekitClient) {
       console.error(TAG, 'livekit-client SDK failed to load');
@@ -34,6 +33,9 @@
     const overlay   = document.getElementById('player-overlay');
     const unmuteBtn = document.getElementById('unmute-hint');
     const liveBadge = document.querySelector('.live-badge');
+    const chatList  = document.getElementById('chat-messages');
+    const chatForm  = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
 
     function setBadgeLive(isLive) {
       if (!liveBadge) return;
@@ -51,6 +53,7 @@
         '<div class="overlay-label">Offline</div>' +
         '<div class="overlay-sub">No one’s streaming right now.</div>';
       overlay.hidden = false;
+      overlay.style.display = '';
     }
 
     function showConnecting() {
@@ -59,28 +62,99 @@
       overlay.querySelector('.overlay-content').innerHTML =
         '<div class="spinner"></div><div class="overlay-label">Connecting…</div>';
       overlay.hidden = false;
+      overlay.style.display = '';
     }
 
     function hideOverlay() {
-      log('hide overlay');
       overlay.hidden = true;
-      // Belt-and-suspenders against stale class state hiding the video.
       overlay.style.display = 'none';
     }
 
+    function isPublisher(p) {
+      return p && p.identity === cfg.room;
+    }
+
+    // ─────────────── Chat ───────────────
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+
+    function escapeHTML(s) {
+      return String(s).replace(/[&<>"']/g, function (c) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+      });
+    }
+
+    function colorFor(identity) {
+      // deterministic color per identity (HSL hue from a simple hash)
+      let h = 0;
+      for (let i = 0; i < identity.length; i++) h = (h * 31 + identity.charCodeAt(i)) % 360;
+      return 'hsl(' + h + ', 65%, 72%)';
+    }
+
+    function parseMeta(raw) {
+      if (!raw) return {};
+      try { return JSON.parse(raw); } catch (e) { return {}; }
+    }
+
+    function avatarInitial(name) {
+      const t = (name || '?').trim();
+      return t.length ? t[0].toUpperCase() : '?';
+    }
+
+    function renderChat(participant, text, opts) {
+      opts = opts || {};
+      const isSelf = !!opts.self;
+      const name = (participant && participant.name) || (isSelf ? 'You' : 'Guest');
+      const meta = parseMeta(participant && participant.metadata);
+      const color = colorFor((participant && participant.identity) || 'self');
+
+      const row = document.createElement('div');
+      row.className = 'chat-msg';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'chat-avatar';
+      if (meta.avatar_url) {
+        const img = document.createElement('img');
+        img.src = meta.avatar_url;
+        img.alt = '';
+        avatar.appendChild(img);
+      } else {
+        avatar.textContent = avatarInitial(name);
+        avatar.style.background = 'hsl(' + colorFor(name).match(/\d+/)[0] + ', 30%, 22%)';
+        avatar.style.color = color;
+      }
+
+      const body = document.createElement('div');
+      body.className = 'chat-body';
+      body.innerHTML =
+        '<span class="chat-name" style="color:' + color + '">' + escapeHTML(name) + '</span>' +
+        '<span class="chat-text">' + escapeHTML(text) + '</span>';
+
+      row.appendChild(avatar);
+      row.appendChild(body);
+
+      const nearBottom =
+        chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 80;
+      chatList.appendChild(row);
+      if (nearBottom) chatList.scrollTop = chatList.scrollHeight;
+    }
+
+    function renderSystem(text) {
+      const row = document.createElement('div');
+      row.className = 'chat-system';
+      row.textContent = text;
+      chatList.appendChild(row);
+      chatList.scrollTop = chatList.scrollHeight;
+    }
+
+    // ─────────────── Room ───────────────
     const room = new LivekitClient.Room({
       adaptiveStream: true,
       dynacast: true,
     });
 
-    // Wire EVERY interesting room event with logs so debugging from
-    // DevTools is one-shot.
     room.on(LivekitClient.RoomEvent.Connected, function () {
-      log('room connected', {
-        publishers: Array.from(room.remoteParticipants.values()).map(function (p) {
-          return { identity: p.identity, tracks: p.trackPublications.size };
-        })
-      });
+      log('room connected');
     });
 
     room.on(LivekitClient.RoomEvent.Disconnected, function (reason) {
@@ -91,21 +165,15 @@
 
     room.on(LivekitClient.RoomEvent.ParticipantConnected, function (p) {
       log('participant connected', p.identity);
-      if (p.identity && !p.identity.startsWith('guest-')) {
-        showConnecting();
-      }
+      if (isPublisher(p)) showConnecting();
     });
 
     room.on(LivekitClient.RoomEvent.ParticipantDisconnected, function (p) {
       log('participant disconnected', p.identity);
-      if (p.identity && !p.identity.startsWith('guest-')) {
+      if (isPublisher(p)) {
         showOffline();
         setBadgeLive(false);
       }
-    });
-
-    room.on(LivekitClient.RoomEvent.TrackPublished, function (pub, p) {
-      log('track published', { from: p.identity, kind: pub.kind, source: pub.source });
     });
 
     room.on(LivekitClient.RoomEvent.TrackSubscribed, function (track, pub, p) {
@@ -127,7 +195,7 @@
           srcObjectSet: !!videoEl.srcObject,
           videoWidth: videoEl.videoWidth,
           videoHeight: videoEl.videoHeight,
-          readyState: videoEl.readyState,  // 0=nothing, 4=enough data
+          readyState: videoEl.readyState,  // 0 = nothing, 4 = enough data
           paused: videoEl.paused,
           muted: videoEl.muted,
         });
@@ -171,38 +239,49 @@
     });
 
     room.on(LivekitClient.RoomEvent.TrackUnsubscribed, function (track) {
-      log('track unsubscribed', track.kind);
       track.detach().forEach(function (el) { el.remove(); });
     });
 
-    room.on(LivekitClient.RoomEvent.TrackSubscriptionFailed, function (sid, p) {
-      log('track subscription failed', { sid: sid, from: p && p.identity });
-    });
-
-    room.on(LivekitClient.RoomEvent.ConnectionQualityChanged, function (q, p) {
-      log('quality', { from: p && p.identity, q: q });
+    room.on(LivekitClient.RoomEvent.DataReceived, function (payload, participant) {
+      let msg;
+      try { msg = JSON.parse(decoder.decode(payload)); }
+      catch (e) { log('bad chat payload', e); return; }
+      if (msg && msg.type === 'chat' && typeof msg.text === 'string') {
+        renderChat(participant, msg.text);
+      }
     });
 
     unmuteBtn.addEventListener('click', function () {
       videoEl.muted = false;
-      videoEl.play().catch(function (e) { log('unmute play err', e); });
+      videoEl.play().catch(function () {});
       unmuteBtn.hidden = true;
     });
+
+    // Send chat — only wired when canChat=true (server enforces too).
+    if (chatForm && cfg.canChat) {
+      chatForm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        const text = chatInput.value.trim();
+        if (!text) return;
+        const payload = encoder.encode(JSON.stringify({ type: 'chat', text: text }));
+        room.localParticipant.publishData(payload, { reliable: true }).then(function () {
+          renderChat(room.localParticipant, text, { self: true });
+          chatInput.value = '';
+        }).catch(function (err) {
+          log('publishData failed', err);
+          renderSystem('Failed to send. Try again.');
+        });
+      });
+    }
 
     log('connecting...');
     room.connect(cfg.url, cfg.token, { autoSubscribe: true })
       .then(function () {
-        const publishers = Array.from(room.remoteParticipants.values())
-          .filter(function (p) {
-            return p.identity && !p.identity.startsWith('guest-');
-          });
-        log('connected, remote publishers:', publishers.length);
-        if (publishers.length === 0) {
+        const pubInRoom = Array.from(room.remoteParticipants.values()).some(isPublisher);
+        if (!pubInRoom) {
           showOffline();
           setBadgeLive(false);
         } else {
-          // Publisher already in room — wait for TrackSubscribed (autoSubscribe
-          // is on, tracks should subscribe within a tick).
           showConnecting();
         }
       })

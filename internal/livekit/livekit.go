@@ -61,21 +61,45 @@ func (c *Client) PublicURL() string { return c.publicURL }
 
 // ─────────────────────── Tokens ───────────────────────
 
-// ViewerToken mints a viewer JWT for `room`. Subscribe-only, with the
-// data-channel allowed so chat works.
-func (c *Client) ViewerToken(identity, room string, ttl time.Duration) (string, error) {
+// ViewerOptions configures a viewer JWT. CanChat controls
+// CanPublishData (data-channel = chat). Anonymous viewers get
+// CanChat=false so the JS UI can hide the input AND a hacked client
+// still can't publish.
+type ViewerOptions struct {
+	Identity    string // unique per session; participant.identity in SDK
+	Room        string
+	TTL         time.Duration
+	CanChat     bool
+	DisplayName string // participant.name in SDK
+	Metadata    string // arbitrary JSON, participant.metadata in SDK
+}
+
+// ViewerToken mints a viewer JWT. Subscribe always-on; data-channel
+// (chat) gated by opts.CanChat.
+func (c *Client) ViewerToken(opts ViewerOptions) (string, error) {
 	at := auth.NewAccessToken(c.apiKey, c.apiSecret)
-	canPub, canSub, canData := false, true, true
-	at.SetIdentity(identity).
-		SetName(identity).
+	canPub, canSub := false, true
+	canData := opts.CanChat
+
+	name := opts.DisplayName
+	if name == "" {
+		name = opts.Identity
+	}
+
+	at.SetIdentity(opts.Identity).
+		SetName(name).
 		AddGrant(&auth.VideoGrant{
-			Room:           room,
+			Room:           opts.Room,
 			RoomJoin:       true,
 			CanPublish:     &canPub,
 			CanSubscribe:   &canSub,
 			CanPublishData: &canData,
 		}).
-		SetValidFor(ttl)
+		SetValidFor(opts.TTL)
+
+	if opts.Metadata != "" {
+		at.SetMetadata(opts.Metadata)
+	}
 	return at.ToJWT()
 }
 
@@ -194,10 +218,14 @@ func (c *Client) ListLive(ctx context.Context) ([]LiveStream, error) {
 		hasPublisher := false
 		viewers := 0
 		for _, p := range parts.Participants {
-			if strings.HasPrefix(p.Identity, "guest-") {
+			// Convention: publisher identity == room name (slug).
+			// Everyone else is a viewer regardless of "guest-" prefix.
+			if p.Identity == room.Name {
+				if len(p.Tracks) > 0 {
+					hasPublisher = true
+				}
+			} else {
 				viewers++
-			} else if len(p.Tracks) > 0 {
-				hasPublisher = true
 			}
 		}
 		if hasPublisher {
