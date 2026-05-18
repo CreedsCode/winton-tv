@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Channel.GlobalName}} &mdash; winton-tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5/dist/livekit-client.umd.min.js" defer></script>
+  <script src="/static/channel-viewer.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>winton-tv</span>
+    </a>
+    <nav class="site-nav">
+      {{if .Viewer}}
+        <a href="/dashboard">Dashboard</a>
+        <form method="POST" action="/logout" class="inline-form">
+          <button class="link-button" type="submit">Sign out</button>
+        </form>
+      {{else}}
+        <a href="/login">Sign in</a>
+      {{end}}
+    </nav>
+  </header>
+
+  <main class="channel-main">
+    <div class="player-wrap">
+      <video id="lk-video" class="player-video" autoplay playsinline muted></video>
+      <div id="player-overlay" class="player-overlay {{if .Live}}is-connecting{{else}}is-offline{{end}}">
+        <div class="overlay-content">
+          {{if .Live}}
+            <div class="spinner"></div>
+            <div class="overlay-label">Connecting&hellip;</div>
+          {{else}}
+            <div class="overlay-label">Offline</div>
+            <div class="overlay-sub">{{.Channel.GlobalName}} isn't streaming right now.</div>
+          {{end}}
+        </div>
+      </div>
+      <button id="unmute-hint" class="unmute-hint" hidden>🔇 Click to unmute</button>
+    </div>
+
+    <section class="channel-info">
+      <div class="channel-head">
+        <h1>{{.Channel.GlobalName}}</h1>
+        {{template "_live_badge.html" .}}
+      </div>
+      <p class="muted">winton.tv/<code>{{.Channel.Slug}}</code></p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
+  </footer>
+
+  <script id="lk-config" type="application/json">
+    {"url": "{{.LiveKitPublicURL}}", "token": "{{.LiveKitToken}}", "room": "{{.Channel.Slug}}"}
+  </script>
+</body>
+</html>

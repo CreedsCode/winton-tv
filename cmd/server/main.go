@@ -103,6 +103,11 @@ func main() {
 		r.Get("/dashboard/live", hs.DashboardLive)
 	})
 
+	// Channel pages — public, no auth. Must be registered LAST so the
+	// catch-all {slug} pattern doesn't shadow more specific routes.
+	// Handler also guards against reserved slugs as a belt-and-suspenders.
+	r.Get("/{slug}", hs.Channel)
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           r,
