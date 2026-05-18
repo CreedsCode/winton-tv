@@ -157,6 +157,23 @@ func (s *Store) GetUserBySlug(ctx context.Context, slug string) (*User, error) {
 	return u, nil
 }
 
+// GetUserByDiscordID looks up a user by their Discord snowflake. Used
+// to map Discord voice-channel members to winton-tv accounts for the
+// /c/<voice-channel> multi-view.
+func (s *Store) GetUserByDiscordID(ctx context.Context, discordID string) (*User, error) {
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+userColumns+` FROM users WHERE discord_id = $1`, discordID,
+	)
+	u, err := scanUser(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return u, nil
+}
+
 func (s *Store) SlugTaken(ctx context.Context, slug string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,

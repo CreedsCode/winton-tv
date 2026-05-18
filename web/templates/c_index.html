@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Discord channels &mdash; winton-tv</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/">
+      <img src="/static/favicon.svg" alt="" width="28" height="28">
+      <span>winton-tv</span>
+    </a>
+    <nav class="site-nav">
+      {{if .User}}
+        <a href="/dashboard">Dashboard</a>
+        <form method="POST" action="/logout" class="inline-form">
+          <button class="link-button" type="submit">Sign out</button>
+        </form>
+      {{else}}
+        <a href="/login">Sign in</a>
+      {{end}}
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Discord voice channels</h1>
+      <p class="lede">
+        Who's in voice right now &middot; click a channel to watch everyone
+        in it who's streaming.
+      </p>
+    </section>
+
+    <section class="section">
+      {{if .Channels}}
+      <div class="vc-grid">
+        {{range .Channels}}
+        <a class="vc-card{{if gt .LiveCount 0}} has-live{{end}}" href="/c/{{.ID}}">
+          <div class="vc-head">
+            <span class="vc-name">🔊 {{.Name}}</span>
+            <span class="vc-count">{{.Total}} in voice</span>
+          </div>
+          {{if gt .LiveCount 0}}
+          <div class="vc-live">
+            <span class="live-pill"><span class="live-dot"></span>{{.LiveCount}} streaming</span>
+          </div>
+          {{else if .Streamers}}
+          <div class="vc-meta">
+            {{len .Streamers}} winton-tv {{if eq (len .Streamers) 1}}member{{else}}members{{end}} (none live)
+          </div>
+          {{else}}
+          <div class="vc-meta">No winton-tv members in this channel</div>
+          {{end}}
+        </a>
+        {{end}}
+      </div>
+      {{else}}
+      <div class="empty-state">
+        <p class="empty-heading">No one's in voice right now.</p>
+        <p class="empty-sub">Hop into a voice channel on Discord and refresh.</p>
+      </div>
+      {{end}}
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Open source &middot; <a href="https://github.com/CreedsCode/winton-tv">GitHub</a></p>
+  </footer>
+</body>
+</html>

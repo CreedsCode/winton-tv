@@ -566,6 +566,14 @@ main {
   font-weight: 600;
   vertical-align: middle;
 }
+.section-link {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+  margin-left: 1rem;
+  vertical-align: middle;
+}
+.section-link:hover { color: var(--accent); text-decoration: none; }
 
 .live-grid {
   display: grid;
@@ -1096,6 +1104,88 @@ main {
   font-size: 0.9rem;
 }
 .multi-mute:hover { background: rgba(0,0,0,0.85); }
+
+/* ───────────────────── multi-view header ───────────────────── */
+.multi-header {
+  margin: 0 0 1rem;
+}
+.multi-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
+}
+.multi-header .muted { margin-top: 0.25rem; }
+
+/* ───────────────────── voice channel cards (/c) ───────────────────── */
+.vc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.vc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.1rem 1.25rem;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--fg);
+  text-decoration: none;
+  transition: border-color 120ms, transform 120ms;
+}
+.vc-card:hover {
+  border-color: var(--fg-muted);
+  transform: translateY(-2px);
+  text-decoration: none;
+}
+.vc-card.has-live {
+  border-color: rgba(242, 63, 91, 0.45);
+}
+.vc-card.has-live:hover {
+  border-color: rgba(242, 63, 91, 0.7);
+}
+.vc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.vc-name {
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+}
+.vc-count {
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.vc-meta {
+  font-size: 0.85rem;
+  color: var(--fg-dim);
+}
+.vc-live {
+  margin-top: 0.25rem;
+}
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.2rem 0.6rem;
+  background: rgba(242, 63, 91, 0.12);
+  border: 1px solid rgba(242, 63, 91, 0.4);
+  color: #ff8593;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.live-pill .live-dot {
+  width: 0.4rem;
+  height: 0.4rem;
+}
 
 /* ───────────────────── mobile ───────────────────── */
 @media (max-width: 900px) {

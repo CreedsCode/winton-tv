@@ -12,6 +12,7 @@ import (
 
 	"github.com/CreedsCode/winton-tv/internal/auth"
 	"github.com/CreedsCode/winton-tv/internal/config"
+	discordbot "github.com/CreedsCode/winton-tv/internal/discord"
 	"github.com/CreedsCode/winton-tv/internal/handlers"
 	"github.com/CreedsCode/winton-tv/internal/livekit"
 	"github.com/CreedsCode/winton-tv/internal/session"
@@ -61,7 +62,25 @@ func main() {
 		Logger:      logger,
 	})
 
-	hs, err := handlers.New(cfg, st, lk, logger)
+	// Discord bot is optional. Without DISCORD_BOT_TOKEN the /c routes
+	// 501 but everything else works.
+	var bot *discordbot.Bot
+	if cfg.DiscordBotToken != "" {
+		bot, err = discordbot.New(cfg.DiscordBotToken, cfg.DiscordGuildID, logger)
+		if err != nil {
+			logger.Error("discord bot init failed (continuing without)", "err", err)
+			bot = nil
+		} else if err := bot.Start(startCtx); err != nil {
+			logger.Error("discord bot start failed (continuing without)", "err", err)
+			bot = nil
+		} else {
+			defer bot.Close()
+		}
+	} else {
+		logger.Info("DISCORD_BOT_TOKEN unset — /c routes disabled")
+	}
+
+	hs, err := handlers.New(cfg, st, lk, bot, logger)
 	if err != nil {
 		logger.Error("handlers init failed", "err", err)
 		os.Exit(1)
@@ -81,6 +100,8 @@ func main() {
 	r.Get("/login", hs.Login)
 	r.Get("/healthz", hs.Healthz)
 	r.Get("/multi", hs.Multi)
+	r.Get("/c", hs.CIndex)
+	r.Get("/c/{channelID}", hs.CView)
 	r.Get("/api/live-streams", hs.APILiveStreams)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
