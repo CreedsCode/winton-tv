@@ -27,6 +27,7 @@ services:
       DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET}"
       DISCORD_GUILD_ID: "${DISCORD_GUILD_ID}"
       DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN}"
+      ADMIN_DISCORD_IDS: "${ADMIN_DISCORD_IDS}"
       DATABASE_URL: "${DATABASE_URL:-postgres://winton:winton@postgres:5432/winton?sslmode=disable}"
       LIVEKIT_URL: "${LIVEKIT_URL:-ws://livekit:7880}"
       LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL}"
