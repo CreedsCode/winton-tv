@@ -147,7 +147,13 @@ func (a *Auth) Callback(w http.ResponseWriter, r *http.Request) {
 	// Auto-promote admins listed in ADMIN_DISCORD_IDS env. Runs every
 	// login so an admin can demote themselves and re-login to re-promote
 	// (mostly used to bootstrap the very first admin).
-	if a.cfg.AdminDiscordIDs[u.DiscordID] && !u.IsAdmin {
+	onAdminList := a.cfg.AdminDiscordIDs[u.DiscordID]
+	a.logger.Info("auth: admin check",
+		"discord_id", u.DiscordID,
+		"on_admin_list", onAdminList,
+		"admin_list_size", len(a.cfg.AdminDiscordIDs),
+		"is_admin_now", u.IsAdmin)
+	if onAdminList && !u.IsAdmin {
 		if err := a.store.PromoteAdmin(ctx, u.ID); err != nil {
 			a.logger.Warn("auto-promote admin", "uid", u.ID, "err", err)
 		} else {
