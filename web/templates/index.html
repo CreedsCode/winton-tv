@@ -15,7 +15,14 @@
       <span>winton-tv</span>
     </a>
     <nav class="site-nav">
-      <a href="/login">Sign in</a>
+      {{if .User}}
+        <a href="/dashboard">Dashboard</a>
+        <form method="POST" action="/logout" class="inline-form">
+          <button class="link-button" type="submit">Sign out</button>
+        </form>
+      {{else}}
+        <a href="/login">Sign in</a>
+      {{end}}
     </nav>
   </header>
 
@@ -28,7 +35,11 @@
       </p>
       <div class="cta-row">
         <a class="btn btn-primary" href="#live">Watch live</a>
-        <a class="btn btn-secondary" href="/login">Start streaming</a>
+        {{if .User}}
+          <a class="btn btn-secondary" href="/dashboard">Your dashboard</a>
+        {{else}}
+          <a class="btn btn-secondary" href="/login">Start streaming</a>
+        {{end}}
       </div>
     </section>
 

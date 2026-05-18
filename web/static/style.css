@@ -228,6 +228,83 @@ main {
   color: var(--fg-dim);
 }
 
+/* ───────────────────── forms ───────────────────── */
+.slug-form {
+  margin-top: 1.5rem;
+}
+.slug-form label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+.slug-input-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-2);
+  overflow: hidden;
+  transition: border-color 120ms;
+}
+.slug-input-wrap:focus-within {
+  border-color: var(--accent);
+}
+.slug-prefix {
+  padding: 0.75rem 0.85rem;
+  background: var(--bg-3);
+  color: var(--fg-muted);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+.slug-input-wrap input {
+  flex: 1;
+  padding: 0.75rem 0.9rem;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--fg);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.95rem;
+  min-width: 0;
+}
+.slug-help {
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.form-error {
+  background: rgba(242, 63, 91, 0.08);
+  border: 1px solid rgba(242, 63, 91, 0.3);
+  color: #ff8593;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+}
+.form-error a { color: inherit; text-decoration: underline; }
+
+/* ───────────────────── inline form buttons (logout etc.) ───────────────────── */
+.inline-form {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+.link-button {
+  background: none;
+  border: 0;
+  color: var(--fg-muted);
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 0;
+  margin-left: 1.5rem;
+  cursor: pointer;
+}
+.link-button:hover { color: var(--fg); }
+
 /* ───────────────────── mobile ───────────────────── */
 @media (max-width: 600px) {
   .hero { padding-top: 3rem; }
