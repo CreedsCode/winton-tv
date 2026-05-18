@@ -1070,6 +1070,9 @@ main {
 .multi-grid[data-count="7"],
 .multi-grid[data-count="8"],
 .multi-grid[data-count="9"] { grid-template-columns: repeat(3, 1fr); }
+.multi-grid[data-count="10"],
+.multi-grid[data-count="11"],
+.multi-grid[data-count="12"] { grid-template-columns: repeat(4, 1fr); }
 
 .multi-cell {
   position: relative;
@@ -1574,7 +1577,10 @@ main {
   .multi-grid[data-count="6"],
   .multi-grid[data-count="7"],
   .multi-grid[data-count="8"],
-  .multi-grid[data-count="9"] { grid-template-columns: 1fr 1fr; }
+  .multi-grid[data-count="9"],
+  .multi-grid[data-count="10"],
+  .multi-grid[data-count="11"],
+  .multi-grid[data-count="12"] { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 600px) {
   .hero { padding-top: 3rem; }
