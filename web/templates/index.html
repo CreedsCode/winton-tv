@@ -44,11 +44,33 @@
     </section>
 
     <section id="live" class="section">
-      <h2 class="section-title">Live right now</h2>
+      <h2 class="section-title">
+        Live right now
+        {{if .Cards}}<span class="section-count">{{len .Cards}}</span>{{end}}
+      </h2>
+      {{if .Cards}}
+      <div class="live-grid">
+        {{range .Cards}}
+        <a class="live-card" href="/{{.Slug}}">
+          <div class="live-card-thumb">
+            <span class="live-card-pill"><span class="live-dot"></span>LIVE</span>
+            <span class="live-card-viewers">
+              {{.ViewerCount}} {{if eq .ViewerCount 1}}viewer{{else}}viewers{{end}}
+            </span>
+          </div>
+          <div class="live-card-info">
+            <h3>{{.DisplayName}}</h3>
+            <p class="muted">winton.tv/{{.Slug}}</p>
+          </div>
+        </a>
+        {{end}}
+      </div>
+      {{else}}
       <div class="empty-state">
         <p class="empty-heading">Nothing live yet.</p>
         <p class="empty-sub">Be the first &mdash; <a href="/login">sign in with Discord</a> and get a stream key.</p>
       </div>
+      {{end}}
     </section>
 
     <section class="section">

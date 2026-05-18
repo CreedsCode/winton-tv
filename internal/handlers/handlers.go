@@ -37,10 +37,46 @@ func New(cfg *config.Config, st *store.Store, lk *livekit.Client, logger *slog.L
 
 // ─────────────────────── public pages ───────────────────────
 
+// LiveCard is the data shape the landing page template iterates over.
+type LiveCard struct {
+	Slug        string
+	DisplayName string
+	ViewerCount int
+}
+
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
+	cards, err := h.liveCards(r)
+	if err != nil {
+		h.logger.Warn("index live cards", "err", err)
+	}
 	h.render(w, "index.html", map[string]any{
-		"User": auth.Current(r),
+		"User":  auth.Current(r),
+		"Cards": cards,
 	})
+}
+
+func (h *Handler) liveCards(r *http.Request) ([]LiveCard, error) {
+	streams, err := h.livekit.ListLive(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	cards := make([]LiveCard, 0, len(streams))
+	for _, s := range streams {
+		user, err := h.store.GetUserBySlug(r.Context(), s.Slug)
+		if err != nil {
+			h.logger.Warn("liveCards: get user by slug", "slug", s.Slug, "err", err)
+			continue
+		}
+		if user == nil {
+			continue // room exists but no matching user record (orphan)
+		}
+		cards = append(cards, LiveCard{
+			Slug:        s.Slug,
+			DisplayName: user.GlobalName,
+			ViewerCount: s.ViewerCount,
+		})
+	}
+	return cards, nil
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
