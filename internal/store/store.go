@@ -73,12 +73,25 @@ type User struct {
 	StreamKey       *string
 	StreamWhipURL   *string
 	StreamCreatedAt *time.Time
+
+	// Channel discovery setting. One of "public", "members", "unlisted".
+	// Default "public" via migration. Controls whether the channel appears
+	// on the discovery grid; the channel page itself is always accessible.
+	Discovery string
 }
+
+// Discovery values. Mirror the CHECK constraint in migration 004.
+const (
+	DiscoveryPublic   = "public"
+	DiscoveryMembers  = "members"
+	DiscoveryUnlisted = "unlisted"
+)
 
 const userColumns = `
     id, discord_id, username, global_name, avatar_hash, slug,
     is_admin, banned, created_at,
-    ingress_id, stream_key, stream_whip_url, stream_created_at
+    ingress_id, stream_key, stream_whip_url, stream_created_at,
+    discovery
 `
 
 func scanUser(row pgx.Row) (*User, error) {
@@ -87,6 +100,7 @@ func scanUser(row pgx.Row) (*User, error) {
 		&u.ID, &u.DiscordID, &u.Username, &u.GlobalName, &u.AvatarHash, &u.Slug,
 		&u.IsAdmin, &u.Banned, &u.CreatedAt,
 		&u.IngressID, &u.StreamKey, &u.StreamWhipURL, &u.StreamCreatedAt,
+		&u.Discovery,
 	); err != nil {
 		return nil, err
 	}
@@ -172,6 +186,23 @@ func (s *Store) SetStreamCredentials(ctx context.Context, userID int64, ingressI
 		       updated_at        = now()
 		 WHERE id = $4
 	`, ingressID, streamKey, whipURL, userID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errors.New("user not found")
+	}
+	return nil
+}
+
+// SetUserDiscovery updates the user's discovery setting. Caller must
+// validate `value` is one of the Discovery* constants — DB CHECK rejects
+// anything else but the error is opaque.
+func (s *Store) SetUserDiscovery(ctx context.Context, userID int64, value string) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE users SET discovery = $1, updated_at = now() WHERE id = $2`,
+		value, userID,
+	)
 	if err != nil {
 		return err
 	}

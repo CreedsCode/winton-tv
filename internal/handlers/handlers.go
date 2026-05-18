@@ -70,6 +70,7 @@ func (h *Handler) liveCards(r *http.Request) ([]LiveCard, error) {
 	if err != nil {
 		return nil, err
 	}
+	viewer := auth.Current(r) // nil = anonymous
 	cards := make([]LiveCard, 0, len(streams))
 	for _, s := range streams {
 		user, err := h.store.GetUserBySlug(r.Context(), s.Slug)
@@ -80,6 +81,9 @@ func (h *Handler) liveCards(r *http.Request) ([]LiveCard, error) {
 		if user == nil {
 			continue // room exists but no matching user record (orphan)
 		}
+		if !shouldShowInDiscovery(user.Discovery, viewer != nil) {
+			continue
+		}
 		cards = append(cards, LiveCard{
 			Slug:        s.Slug,
 			DisplayName: user.GlobalName,
@@ -87,6 +91,23 @@ func (h *Handler) liveCards(r *http.Request) ([]LiveCard, error) {
 		})
 	}
 	return cards, nil
+}
+
+// shouldShowInDiscovery applies the channel's discovery setting against
+// the viewer's auth state. Authenticated viewers in our DB are by
+// construction Winton guild members (the auth.Callback gates on that).
+func shouldShowInDiscovery(setting string, viewerAuthed bool) bool {
+	switch setting {
+	case store.DiscoveryPublic:
+		return true
+	case store.DiscoveryMembers:
+		return viewerAuthed
+	case store.DiscoveryUnlisted:
+		return false
+	default:
+		// Unknown value — fail closed (don't surface accidentally).
+		return false
+	}
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -251,6 +272,37 @@ func (h *Handler) DashboardRotateStream(w http.ResponseWriter, r *http.Request) 
 	if err := h.createAndPersistIngress(r, u); err != nil {
 		h.logger.Error("rotate -> create", "uid", u.ID, "err", err)
 		http.Error(w, "failed to create new stream — try again", http.StatusBadGateway)
+		return
+	}
+	http.Redirect(w, r, "/dashboard", http.StatusFound)
+}
+
+// DashboardSetDiscovery updates the user's channel discovery setting.
+// Posted from the dashboard form. HTMX-friendly: returns 204 No Content
+// on success so HTMX doesn't swap anything.
+func (h *Handler) DashboardSetDiscovery(w http.ResponseWriter, r *http.Request) {
+	u := auth.Current(r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	value := r.FormValue("discovery")
+	switch value {
+	case store.DiscoveryPublic, store.DiscoveryMembers, store.DiscoveryUnlisted:
+		// ok
+	default:
+		http.Error(w, "invalid discovery value", http.StatusBadRequest)
+		return
+	}
+	if err := h.store.SetUserDiscovery(r.Context(), u.ID, value); err != nil {
+		h.logger.Error("set discovery", "uid", u.ID, "err", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	// Non-HTMX: redirect back. HTMX (hx-trigger=change): 204 no-content,
+	// browser keeps the radio user just picked.
+	if r.Header.Get("HX-Request") == "true" {
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	http.Redirect(w, r, "/dashboard", http.StatusFound)
