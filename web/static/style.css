@@ -1335,32 +1335,41 @@ main {
   font-weight: 600;
 }
 
-/* Generic badges */
+/* Generic badges — share the same pill geometry as .live-badge so
+   they don't visually mismatch when shown side-by-side (profile page,
+   admin tables). Only color/border vary by modifier. */
 .badge {
-  display: inline-block;
-  padding: 0.1rem 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.78rem;
+  font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  border: 1px solid var(--border);
+  background: var(--bg-3);
+  color: var(--fg-muted);
 }
 .badge-admin {
   background: rgba(88, 101, 242, 0.15);
-  border: 1px solid rgba(88, 101, 242, 0.4);
+  border-color: rgba(88, 101, 242, 0.4);
   color: #8b97ff;
 }
 .badge-banned {
   background: rgba(242, 63, 91, 0.15);
-  border: 1px solid rgba(242, 63, 91, 0.4);
+  border-color: rgba(242, 63, 91, 0.4);
   color: #ff8593;
 }
 .badge-action {
   background: var(--bg-3);
-  border: 1px solid var(--border);
+  border-color: var(--border);
   color: var(--fg);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.7rem;
+  font-size: 0.72rem;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* ───────────────────── /admin pages (V1.8) ───────────────────── */
