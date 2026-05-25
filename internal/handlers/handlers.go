@@ -60,6 +60,89 @@ type LiveCard struct {
 	DisplayName string
 	Title       string // stream title; empty -> template falls back to DisplayName as the headline
 	ViewerCount int
+	// Display-only fields hydrated by the landing handler so the template
+	// can stay dumb. Color tints the card's gradient + avatar; Initial is
+	// the first letter shown inside the avatar circle.
+	Color   string
+	Initial string
+}
+
+// MarqueeItem is one slug shown in the hero marquee. Class is a styling
+// hint ("", "accent", "red") that mirrors the design's per-item treatment.
+type MarqueeItem struct {
+	Slug  string
+	Class string
+}
+
+// landingPalette mirrors the brand-y per-streamer accent colors used
+// across the design (shared.jsx). The landing assigns one to each live
+// card so the page keeps multi-color personality even at zero-config.
+var landingPalette = []string{
+	"#5865f2", // blurple
+	"#ff8593", // soft red
+	"#6ed99b", // mint
+	"#ffce5a", // mustard
+	"#b6beff", // pastel blurple
+}
+
+func paletteFor(slug string) string {
+	if slug == "" {
+		return landingPalette[0]
+	}
+	var h uint32
+	for _, c := range slug {
+		h = h*31 + uint32(c)
+	}
+	return landingPalette[int(h)%len(landingPalette)]
+}
+
+func initialOf(name, slug string) string {
+	s := name
+	if s == "" {
+		s = slug
+	}
+	if s == "" {
+		return "?"
+	}
+	return strings.ToUpper(s[:1])
+}
+
+// fallbackMarquee is the slug-personality list shown when nobody is live.
+// Keeps the hero strip feeling populated on cold-arrival without needing
+// real data. Mirrors STREAMS from the design's shared.jsx.
+var fallbackMarquee = []MarqueeItem{
+	{Slug: "creeds", Class: "red"},
+	{Slug: "driftgod"},
+	{Slug: "lucio_irl"},
+	{Slug: "mercyman", Class: "red"},
+	{Slug: "gengu"},
+	{Slug: "tracerz"},
+}
+
+// buildMarquee returns the slugs cycled three times so the CSS infinite-
+// scroll has enough content to loop seamlessly. Uses real live slugs when
+// any are present, falls back to fixture personalities otherwise. Items
+// with >30 viewers get the red treatment to match the design rule.
+func buildMarquee(cards []LiveCard) []MarqueeItem {
+	base := make([]MarqueeItem, 0, len(cards))
+	for i, c := range cards {
+		class := ""
+		switch {
+		case c.ViewerCount > 30:
+			class = "red"
+		case i%3 == 0:
+			class = "accent"
+		}
+		base = append(base, MarqueeItem{Slug: c.Slug, Class: class})
+	}
+	if len(base) == 0 {
+		base = fallbackMarquee
+	}
+	out := make([]MarqueeItem, 0, len(base)*3)
+	for i := 0; i < 3; i++ {
+		out = append(out, base...)
+	}
+	return out
 }
 
 func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
@@ -68,36 +151,42 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 		h.logger.Warn("index live cards", "err", err)
 	}
 
-	// Active voice channels (bot is optional — only render section if present)
-	var vcCards []VoiceChannelCard
-	if h.discord != nil {
-		channels := h.discord.ActiveVoiceChannels()
-		liveSet := make(map[string]bool, len(cards))
-		for _, c := range cards {
-			liveSet[c.Slug] = true
-		}
-		for _, ch := range channels {
-			card := VoiceChannelCard{ID: ch.ID, Name: ch.Name, Total: len(ch.Members)}
-			for _, did := range ch.Members {
-				u, err := h.store.GetUserByDiscordID(r.Context(), did)
-				if err != nil || u == nil || u.Slug == nil {
-					continue
-				}
-				card.Streamers = append(card.Streamers, *u.Slug)
-				if liveSet[*u.Slug] {
-					card.LiveCount++
-				}
-			}
-			vcCards = append(vcCards, card)
-		}
+	// Hydrate display-only fields the template needs (avatar color + initial).
+	slugs := make([]string, 0, len(cards))
+	for i := range cards {
+		cards[i].Color = paletteFor(cards[i].Slug)
+		cards[i].Initial = initialOf(cards[i].DisplayName, cards[i].Slug)
+		slugs = append(slugs, cards[i].Slug)
 	}
 
 	h.render(w, "index.html", map[string]any{
 		"User":          auth.Current(r),
 		"Cards":         cards,
-		"VoiceChannels": vcCards,
+		"LiveCount":     len(cards),
+		"AllSlugs":      strings.Join(slugs, ","),
+		"MarqueeItems":  buildMarquee(cards),
+		"Featured":      nil, // reserved for future "featured PUG cast" data
 		"DiscordOn":     h.discord != nil,
+		"DiscordInvite": h.discordInviteOrHash(),
 	})
+}
+
+// PartialNotInGuild renders the "you're not in the guild" modal as an HTML
+// fragment. Triggered by HTMX from the landing's "Start streaming" CTA
+// when the visitor isn't signed in (we can't know guild membership yet
+// without OAuth — surfacing the prompt early lets them join the Discord
+// before they bother authenticating).
+func (h *Handler) PartialNotInGuild(w http.ResponseWriter, r *http.Request) {
+	h.render(w, "_not_in_guild.html", map[string]any{
+		"DiscordInvite": h.discordInviteOrHash(),
+	})
+}
+
+func (h *Handler) discordInviteOrHash() string {
+	if h.cfg.DiscordInviteURL == "" {
+		return "#"
+	}
+	return h.cfg.DiscordInviteURL
 }
 
 func (h *Handler) liveCards(r *http.Request) ([]LiveCard, error) {
@@ -1221,8 +1310,9 @@ func mustReservedSet() map[string]bool {
 	list := []string{
 		"about", "admin", "api", "auth", "c", "callback", "channel", "channels",
 		"chat", "dashboard", "discord", "docs", "healthz", "help", "login",
-		"logout", "multi", "onboarding", "privacy", "search", "settings", "static",
-		"stream", "streams", "support", "tos", "u", "user", "users", "watch",
+		"logout", "multi", "onboarding", "partials", "privacy", "search",
+		"settings", "static", "stream", "streams", "support", "tos", "u",
+		"user", "users", "watch",
 	}
 	out := make(map[string]bool, len(list))
 	for _, s := range list {

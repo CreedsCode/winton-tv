@@ -1,0 +1,43 @@
+{{define "_not_in_guild.html"}}
+<div class="ov-modal-shell"
+     hx-on:click="if(event.target===this){this.remove();}">
+  <div class="ov-modal-card">
+    <div class="ov-modal-halo"></div>
+
+    <button class="ov-modal-close" type="button" aria-label="Close"
+            hx-on:click="this.closest('.ov-modal-shell').remove();">&times;</button>
+
+    <div class="ov-modal-body">
+      <div class="ov-modal-eyebrow">
+        <span aria-hidden="true">&#9995;</span> Hold up
+      </div>
+
+      <h2 class="ov-modal-title">
+        You're not in the<br>
+        <span class="accent">Winton guild</span> yet.
+      </h2>
+      <p class="ov-modal-lede">
+        winton.tv is guild-only for streaming + chat. Join the Discord first &mdash;
+        takes a sec &mdash; then come back and sign in.
+      </p>
+
+      <div class="ov-modal-cta">
+        <a class="ov-btn ov-btn-primary ov-modal-btn"
+           href="{{.DiscordInvite}}"
+           target="_blank" rel="noopener">
+          <span aria-hidden="true">🎮</span> Join the Discord
+        </a>
+        <button class="ov-btn ov-btn-secondary ov-modal-btn" type="button"
+                hx-on:click="this.closest('.ov-modal-shell').remove();">
+          Just lemme watch
+        </button>
+      </div>
+
+      <div class="ov-modal-foot">
+        <span>Anyone can watch streams without an account.</span>
+        <a href="/auth/discord">Already in? Try again &rarr;</a>
+      </div>
+    </div>
+  </div>
+</div>
+{{end}}

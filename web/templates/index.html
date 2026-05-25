@@ -3,143 +3,261 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Winton Tv &mdash; community streaming</title>
-  <meta name="description" content="Discord-gated, low-latency multistream platform for the Winton community.">
+  <title>winton.tv &mdash; watch the chaos unfold</title>
+  <meta name="description" content="Self-hosted streams for the Winton Overwatch guild. Members streaming for members. Big shittalk, silly projects, PUG broadcasts.">
   <link rel="stylesheet" href="/static/style.css">
-  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/style-big.css">
+  <link rel="icon" type="image/svg+xml" href="/static/logo-mark.svg">
+  <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous" defer></script>
 </head>
 <body>
-  <header class="site-header">
-    <a class="brand" href="/">
-      <img src="/static/favicon.svg" alt="" width="28" height="28">
-      <span>Winton Tv</span>
-    </a>
-    <nav class="site-nav">
-      {{if .User}}
-        <a href="/dashboard">Dashboard</a>
-        <form method="POST" action="/logout" class="inline-form">
-          <button class="link-button" type="submit">Sign out</button>
-        </form>
-      {{else}}
-        <a href="/login">Sign in</a>
-      {{end}}
-    </nav>
-  </header>
+<div class="ov-page">
+  <div class="ov-blob b-blurple" style="width:700px;height:700px;top:-250px;left:-150px;"></div>
+  <div class="ov-blob b-red" style="width:500px;height:500px;top:250px;right:-180px;opacity:0.55;"></div>
+  <div class="ov-grid-overlay"></div>
+  <div class="ov-scanlines"></div>
 
-  <main>
-    <section class="hero">
-      <h1>Community streaming for Winton.</h1>
-      <p class="lede">
-        Low-latency WebRTC video. Discord-gated. No accounts to manage, no
-        ads, no algorithm &mdash; just members streaming for members.
-      </p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="#live">Watch live</a>
+  <div class="ov-content">
+
+    {{/* ─── header ─── */}}
+    <header class="ov-header">
+      <a class="ov-brand" href="/">
+        <img src="/static/logo-mark.svg" alt="" width="32" height="32">
+        <span>winton.tv</span>
+        <span class="ov-brand-tag" style="margin-left:0.4rem;padding:0.15rem 0.55rem;background:var(--bg-3);color:var(--fg-muted);border-radius:999px;font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;">
+          guild members only
+        </span>
+      </a>
+      <nav class="ov-nav">
+        <a href="#live">Live now</a>
+        <a href="/multi">Multi-view</a>
+        {{if .DiscordOn}}<a href="/c">Voice chats</a>{{end}}
         {{if .User}}
-          <a class="btn btn-secondary" href="/dashboard">Your dashboard</a>
+          <a class="ov-btn ov-btn-primary" style="padding:0.65rem 1.15rem;font-size:0.9rem;" href="/dashboard">Dashboard</a>
         {{else}}
-          <a class="btn btn-secondary" href="/login">Start streaming</a>
+          <a class="ov-btn ov-btn-primary" style="padding:0.65rem 1.15rem;font-size:0.9rem;" href="/auth/discord">Sign in with Discord</a>
         {{end}}
+      </nav>
+    </header>
+
+    {{/* ─── hero ─── */}}
+    <section class="ov-hero" style="padding:80px 48px 15px;">
+      <div class="ov-eyebrow" style="background:rgba(242,63,91,0.15);border-color:rgba(242,63,91,0.4);color:#ff8593;">
+        <span class="live-dot"></span>
+        {{.LiveCount}} LIVE NOW &middot; GET IN HERE
+      </div>
+
+      <h1 class="ov-h1">
+        Watch the <span style="color:var(--ov-red);text-shadow:0 0 60px rgba(242,63,91,0.5);">chaos</span><br>
+        unfold.
+      </h1>
+
+      <p class="ov-lede">
+        Members streaming for members. <strong>Big shittalk.</strong> Silly projects.
+        Ranked grinds. PUG broadcasts. The occasional 3am drunk lobby.
+      </p>
+
+      <div class="ov-cta-row">
+        {{if .User}}
+          <a class="ov-btn ov-btn-primary" href="/dashboard">Start streaming</a>
+        {{else}}
+          <a class="ov-btn ov-btn-primary" href="#"
+             hx-get="/partials/not-in-guild"
+             hx-target="#modal-host"
+             hx-swap="innerHTML">Start streaming</a>
+        {{end}}
+        <a class="ov-btn ov-btn-secondary" href="#live">See who's live</a>
       </div>
     </section>
 
-    <section id="live" class="section">
-      <h2 class="section-title">
-        Live right now
-        {{if .Cards}}<span class="section-count">{{len .Cards}}</span>{{end}}
-      </h2>
-      {{if .Cards}}
-      <div class="live-grid">
-        {{range .Cards}}
-        <a class="live-card" href="/{{.Slug}}">
-          <div class="live-card-thumb">
-            <span class="live-card-pill"><span class="live-dot"></span>LIVE</span>
-            <span class="live-card-viewers">
-              {{.ViewerCount}} {{if eq .ViewerCount 1}}viewer{{else}}viewers{{end}}
-            </span>
-          </div>
-          <div class="live-card-info">
-            <h3>{{if .Title}}{{.Title}}{{else}}{{.DisplayName}}{{end}}</h3>
-            <p class="muted">
-              {{if .Title}}{{.DisplayName}} &middot; {{end}}<code>/{{.Slug}}</code>
-            </p>
-          </div>
-        </a>
+    {{/* ─── marquee (full-bleed) ─── */}}
+    <div class="ov-marquee" style="margin-top:3.5rem;margin-bottom:0;">
+      <div class="ov-marquee-track">
+        {{range .MarqueeItems}}
+          <span class="ov-marquee-item{{if .Class}} {{.Class}}{{end}}">
+            <span class="live-dot"></span>/{{.Slug}}
+          </span>
         {{end}}
       </div>
-      {{else}}
-      <div class="empty-state">
-        <p class="empty-heading">Nothing live yet.</p>
-        <p class="empty-sub">Be the first &mdash; <a href="/login">sign in with Discord</a> and get a stream key.</p>
-      </div>
-      {{end}}
-    </section>
+    </div>
 
-    {{if .DiscordOn}}
-    <section class="section">
-      <h2 class="section-title">
-        Active in Discord
-        {{if .VoiceChannels}}<span class="section-count">{{len .VoiceChannels}}</span>{{end}}
-        <a class="section-link" href="/c">all voice channels &rarr;</a>
-      </h2>
-      {{if .VoiceChannels}}
-      <div class="vc-grid">
-        {{range .VoiceChannels}}
-        <a class="vc-card{{if gt .LiveCount 0}} has-live{{end}}" href="/c/{{.ID}}">
-          <div class="vc-head">
-            <span class="vc-name">🔊 {{.Name}}</span>
-            <span class="vc-count">{{.Total}} in voice</span>
+    {{/* ─── featured PUG block ─── */}}
+    {{if .Featured}}
+    <section class="ov-section" style="margin:6px 20px 0;">
+      <div class="ov-section-head">
+        <h2 class="ov-section-title">
+          <small>Right now &middot; featured</small>
+          {{.Featured.Title}}
+        </h2>
+        <a class="ov-section-link" href="/multi?s={{.Featured.MultiSlugs}}">Open multi-view &rarr;</a>
+      </div>
+
+      <div class="ov-featured">
+        <a class="ov-featured-thumb" href="/{{.Featured.CasterSlug}}">
+          <span class="ov-featured-glyph">&#9658;</span>
+          <span class="ov-watch-live" style="top:1rem;left:1rem;">
+            <span class="live-dot"></span>LIVE &middot; cast by {{.Featured.CasterName}}
+          </span>
+          <span class="ov-watch-viewers" style="top:1rem;right:1rem;">
+            {{.Featured.Viewers}} watching
+          </span>
+          <div class="ov-featured-title">
+            <div>
+              <h3>{{.Featured.Headline}}</h3>
+              <p>{{.Featured.Subline}}</p>
+            </div>
           </div>
-          {{if gt .LiveCount 0}}
-          <div class="vc-live">
-            <span class="live-pill"><span class="live-dot"></span>{{.LiveCount}} streaming</span>
-          </div>
-          {{end}}
         </a>
-        {{end}}
+
+        <div class="ov-featured-side">
+          <div class="ov-featured-card">
+            <h4>Switch caster pov</h4>
+            <ul class="ov-pov-list">
+              {{range .Featured.POVs}}
+              <li>
+                <a class="ov-pov-btn{{if .Active}} is-active{{end}}" href="/{{.Slug}}">
+                  <span class="ov-pov-label">
+                    <span class="live-dot" style="width:0.4rem;height:0.4rem;"></span>
+                    {{.Name}}
+                  </span>
+                  <span class="ov-pov-meta">{{.View}}</span>
+                </a>
+              </li>
+              {{end}}
+            </ul>
+          </div>
+
+          <div class="ov-featured-card">
+            <h4>Chat is lit</h4>
+            <div class="ov-chatlite">
+              {{range .Featured.Chat}}
+                <div>
+                  <strong style="color:{{.Color}};">{{.Name}}</strong>
+                  <span class="body">{{.Body}}</span>
+                </div>
+              {{end}}
+            </div>
+          </div>
+        </div>
       </div>
-      {{else}}
-      <div class="empty-state">
-        <p class="empty-heading">Nobody's in voice right now.</p>
-      </div>
-      {{end}}
     </section>
     {{end}}
 
-    <section class="section">
-      <h2 class="section-title">How it works</h2>
-      <ol class="steps">
+    {{/* ─── members popping off (live grid) ─── */}}
+    <section class="ov-section" id="live">
+      <div class="ov-section-head">
+        <h2 class="ov-section-title">
+          <small>Live right now</small>
+          {{if .Cards}}Members popping off.{{else}}Nobody live. Yet.{{end}}
+        </h2>
+        {{if .Cards}}
+          <a class="ov-section-link" href="/multi?s={{.AllSlugs}}">See all {{.LiveCount}} &rarr;</a>
+        {{else if not .User}}
+          <a class="ov-section-link" href="/auth/discord">Sign in &amp; go first &rarr;</a>
+        {{end}}
+      </div>
+
+      {{if .Cards}}
+        <div class="ov-live-grid">
+          {{range .Cards}}
+          <a class="ov-big-card" href="/{{.Slug}}">
+            <div class="ov-big-thumb" style="background:
+              radial-gradient(circle at 25% 30%, {{.Color}}33, transparent 60%),
+              radial-gradient(circle at 80% 75%, rgba(242,63,91,0.15), transparent 60%),
+              linear-gradient(135deg, #1a1a1a, #050505);">
+              <span class="ov-big-pill"><span class="live-dot"></span>LIVE</span>
+              <span class="ov-big-viewers">
+                <span class="live-dot" style="width:0.4rem;height:0.4rem;"></span>{{.ViewerCount}}
+              </span>
+            </div>
+            <div class="ov-big-info">
+              <h3>{{if .Title}}{{.Title}}{{else}}{{.DisplayName}}{{end}}</h3>
+              <div class="ov-by">
+                <span class="ov-by-avatar" style="background:{{.Color}};">{{.Initial}}</span>
+                <strong style="color:var(--fg);">{{.DisplayName}}</strong>
+                <span style="color:var(--fg-dim);">&middot;</span>
+                <code style="background:transparent;padding:0;font-size:0.85rem;color:var(--fg-dim);">/{{.Slug}}</code>
+              </div>
+            </div>
+          </a>
+          {{end}}
+        </div>
+      {{else}}
+        <div class="ov-featured-card" style="text-align:center;padding:3rem 2rem;">
+          <h4 style="margin:0 0 0.6rem;">No streams live right now.</h4>
+          <p style="margin:0;color:var(--fg-muted);font-size:0.95rem;">
+            The guild is between sessions. {{if .User}}
+              <a href="/dashboard" style="color:var(--ov-blurple);">Go first &rarr;</a>
+            {{else}}
+              <a href="/auth/discord" style="color:var(--ov-blurple);">Sign in</a> and be the first to go live.
+            {{end}}
+          </p>
+        </div>
+      {{end}}
+    </section>
+
+    {{/* ─── how it works · live in 4 minutes ─── */}}
+    <section class="ov-section">
+      <div class="ov-section-head">
+        <h2 class="ov-section-title">
+          <small>How it works</small>
+          Live in 4 minutes.
+        </h2>
+        <span style="color:var(--fg-muted);font-size:0.95rem;">
+          No accounts, no signups &mdash; Discord is your login.
+        </span>
+      </div>
+      <ol class="ov-steps">
         <li>
-          <div class="step-num">1</div>
-          <div class="step-body">
-            <h3>Join the Winton Discord</h3>
-            <p>Streaming and chat are gated to verified guild members. Anyone can watch.</p>
-          </div>
+          <span class="ov-step-n">01</span>
+          <h3>Sign in with Discord.</h3>
+          <p>If you're in the guild, you're in. There's no separate account, no email, no password.</p>
         </li>
         <li>
-          <div class="step-num">2</div>
-          <div class="step-body">
-            <h3>Sign in &amp; pick your channel</h3>
-            <p>Login with Discord, choose your channel name (e.g. <code>winton.tv/yourname</code>), grab your stream key.</p>
-          </div>
+          <span class="ov-step-n">02</span>
+          <h3>Claim your channel name.</h3>
+          <p>winton.tv/<code style="color:var(--ov-blurple);">yourname</code> &mdash; same handle you use everywhere else.</p>
         </li>
         <li>
-          <div class="step-num">3</div>
-          <div class="step-body">
-            <h3>Stream from OBS</h3>
-            <p>Paste the WHIP URL into OBS. Hit Start Streaming. Sub-500ms latency to viewers.</p>
-          </div>
+          <span class="ov-step-n">03</span>
+          <h3>One-click setup in OBS.</h3>
+          <p>Copy two lines into OBS. Hit Start Streaming. The LIVE badge flips red in about 10 seconds.</p>
         </li>
       </ol>
     </section>
-  </main>
 
-  <footer class="site-footer">
-    <p>
-      Open source &middot;
-      <a href="https://github.com/CreedsCode/winton-tv">GitHub</a> &middot;
-      Built for the Winton community
-    </p>
-  </footer>
+    {{/* ─── footer ─── */}}
+    <footer class="ov-footer">
+      <div>
+        <div class="ov-foot-brand">winton.tv</div>
+        <p style="margin:0.4rem 0 0;max-width:34ch;">
+          Self-hosted streams for the Winton Overwatch guild. Built by the guild, for the guild.
+        </p>
+      </div>
+      <div class="ov-foot-cols">
+        <div>
+          <h5>Platform</h5>
+          <a href="#live">Live now</a>
+          <a href="/multi">Multi-view</a>
+          {{if .DiscordOn}}<a href="/c">Voice chats</a>{{end}}
+          {{if .User}}<a href="/dashboard">Start streaming</a>{{else}}<a href="/auth/discord">Start streaming</a>{{end}}
+        </div>
+        <div>
+          <h5>Guild</h5>
+          <a href="{{.DiscordInvite}}" target="_blank" rel="noopener">Discord</a>
+          <a href="/c">Members</a>
+        </div>
+        <div>
+          <h5>Tech</h5>
+          <a href="https://github.com/CreedsCode/winton-tv" target="_blank" rel="noopener">GitHub</a>
+          <a href="/healthz" target="_blank">Status</a>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  {{/* HTMX swap target for modals */}}
+  <div id="modal-host"></div>
+</div>
 </body>
 </html>
