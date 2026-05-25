@@ -23,6 +23,10 @@ type Config struct {
 	// session to track voice channel membership for /c/<channel> features.
 	// Without it, those routes 404 but everything else works.
 	DiscordBotToken string
+	// DiscordInviteURL is the public Discord invite link rendered on the
+	// landing page (footer + the "not in guild" modal CTA). Optional —
+	// empty value collapses the link to "#" in the template.
+	DiscordInviteURL string
 
 	// AdminDiscordIDs is a set of Discord user snowflakes who are auto-
 	// promoted to admin on every login. Parsed from ADMIN_DISCORD_IDS
@@ -58,7 +62,8 @@ func Load() (*Config, error) {
 		DiscordClientID:     env("DISCORD_CLIENT_ID", ""),
 		DiscordClientSecret: env("DISCORD_CLIENT_SECRET", ""),
 		DiscordGuildID:      env("DISCORD_GUILD_ID", ""),
-		DiscordBotToken:     env("DISCORD_BOT_TOKEN", ""), // optional
+		DiscordBotToken:     env("DISCORD_BOT_TOKEN", ""),  // optional
+		DiscordInviteURL:    env("DISCORD_INVITE_URL", ""), // optional
 		AdminDiscordIDs:     parseIDSet(env("ADMIN_DISCORD_IDS", "")),
 		DatabaseURL:         env("DATABASE_URL", ""),
 		LiveKitURL:          env("LIVEKIT_URL", ""),

@@ -108,6 +108,7 @@ func main() {
 	r.Get("/api/live-streams", hs.APILiveStreams)
 	r.Get("/api/chat/{slug}/history", hs.ChatHistory)
 	r.Get("/api/chat/{slug}/stream", hs.ChatStream)
+	r.Get("/partials/not-in-guild", hs.PartialNotInGuild)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("web/static"))))
 
 	// auth
