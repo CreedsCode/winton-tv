@@ -343,15 +343,22 @@
         e.preventDefault();
         const text = chatInput.value.trim();
         if (!text) return;
-        const fd = new FormData();
-        fd.append('text', text);
+        // URL-encoded, not FormData. The server's ChatSend calls r.ParseForm()
+        // before r.FormValue("text"), which for multipart/form-data bodies
+        // (what FormData produces) initialises r.Form to a non-nil empty map
+        // *without* reading the body — and FormValue then short-circuits the
+        // ParseMultipartForm path. Net effect: server reads "" and 400s with
+        // "empty message". Matching the rest of the codebase by sending
+        // application/x-www-form-urlencoded sidesteps the trap.
+        const body = new URLSearchParams();
+        body.append('text', text);
         // Disable submit while in-flight (rapid duplicate clicks)
         const submitBtn = chatForm.querySelector('button[type="submit"]');
         if (submitBtn) submitBtn.disabled = true;
         chatInput.value = '';
         fetch('/api/chat/' + cfg.room, {
           method: 'POST',
-          body: fd,
+          body: body,
           credentials: 'same-origin',
         }).then(function (r) {
           if (submitBtn) submitBtn.disabled = false;
